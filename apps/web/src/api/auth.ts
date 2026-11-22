@@ -3,6 +3,7 @@ import { apiClient } from './client';
 export interface AuthAccount {
   id: string;
   email: string;
+  username: string | null;
 }
 
 export interface AuthResponse {
@@ -12,13 +13,14 @@ export interface AuthResponse {
 }
 
 export interface RegisterPayload {
+  username: string;
   email: string;
   password: string;
   name: string;
 }
 
 export interface LoginPayload {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -29,6 +31,11 @@ export async function register(payload: RegisterPayload): Promise<AuthResponse> 
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/login', payload);
+  return data;
+}
+
+export async function setUsername(username: string): Promise<AuthAccount> {
+  const { data } = await apiClient.put<AuthAccount>('/auth/username', { username });
   return data;
 }
 

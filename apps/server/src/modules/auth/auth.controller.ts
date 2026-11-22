@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Req } from '@nestjs/common';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
 import {
@@ -9,6 +9,7 @@ import {
 import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SetUsernameDto } from './dto/set-username.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -33,6 +34,11 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(account.id, dto);
+  }
+
+  @Put('username')
+  setUsername(@CurrentAccount() account: AuthenticatedAccount, @Body() dto: SetUsernameDto) {
+    return this.authService.setUsername(account.id, dto.username);
   }
 
   @Get('me')

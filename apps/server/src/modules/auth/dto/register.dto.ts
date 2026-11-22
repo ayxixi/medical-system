@@ -1,8 +1,15 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { trimString } from '../../../common/utils/string.util';
 
 export class RegisterDto {
+  @Transform(({ value }) => trimString(value)?.toLowerCase())
+  @IsString()
+  @MinLength(3)
+  @MaxLength(32)
+  @Matches(/^[a-z0-9][a-z0-9_.-]*$/)
+  username!: string;
+
   @Transform(({ value }) => trimString(value)?.toLowerCase())
   @IsEmail()
   @MaxLength(254)

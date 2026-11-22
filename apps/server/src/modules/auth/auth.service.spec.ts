@@ -9,6 +9,9 @@ describe('AuthService', () => {
   let service: AuthService;
   let authRepository: {
     findAccountByEmail: jest.Mock;
+    findAccountByUsername: jest.Mock;
+    findAccountByLoginIdentifier: jest.Mock;
+    setUsername: jest.Mock;
     createAccountWithFirstUser: jest.Mock;
     findLoginAttempt: jest.Mock;
     saveLoginAttempt: jest.Mock;
@@ -24,6 +27,9 @@ describe('AuthService', () => {
   beforeEach(() => {
     authRepository = {
       findAccountByEmail: jest.fn(),
+      findAccountByUsername: jest.fn().mockResolvedValue(null),
+      findAccountByLoginIdentifier: jest.fn(),
+      setUsername: jest.fn(),
       createAccountWithFirstUser: jest.fn(),
       findLoginAttempt: jest.fn().mockResolvedValue(null),
       saveLoginAttempt: jest.fn(),
@@ -53,6 +59,7 @@ describe('AuthService', () => {
 
     await expect(
       service.register({
+        username: 'alice',
         email: 'alice@example.com',
         password: 'hunter2hunter2',
         name: 'Alice',
@@ -64,15 +71,18 @@ describe('AuthService', () => {
 
   it('registers account, hashes password and returns token with default user id', async () => {
     authRepository.findAccountByEmail.mockResolvedValue(null);
+    authRepository.findAccountByUsername.mockResolvedValue(null);
     jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-password' as never);
     authRepository.createAccountWithFirstUser.mockResolvedValue({
       id: 'account-1',
       email: 'alice@example.com',
+      username: 'alice',
       tokenVersion: 0,
       users: [{ id: 'user-1', name: 'Alice' }],
     });
 
     const result = await service.register({
+      username: 'alice',
       email: 'alice@example.com',
       password: 'hunter2hunter2',
       name: 'Alice',
@@ -81,6 +91,7 @@ describe('AuthService', () => {
     expect(bcrypt.hash).toHaveBeenCalledWith('hunter2hunter2', 10);
     expect(authRepository.createAccountWithFirstUser).toHaveBeenCalledWith({
       email: 'alice@example.com',
+      username: 'alice',
       passwordHash: 'hashed-password',
       name: 'Alice',
     });
@@ -91,17 +102,17 @@ describe('AuthService', () => {
     });
     expect(result).toEqual({
       accessToken: 'signed-token',
-      account: { id: 'account-1', email: 'alice@example.com' },
+      account: { id: 'account-1', email: 'alice@example.com', username: 'alice' },
       defaultUserId: 'user-1',
     });
   });
 
   it('rejects login when account does not exist', async () => {
-    authRepository.findAccountByEmail.mockResolvedValue(null);
+    authRepository.findAccountByLoginIdentifier.mockResolvedValue(null);
 
     await expect(
       service.login({
-        email: 'alice@example.com',
+        identifier: 'alice',
         password: 'wrong-password',
       }, 'client-1'),
     ).rejects.toThrow(UnauthorizedException);
@@ -110,9 +121,10 @@ describe('AuthService', () => {
   });
 
   it('rejects login when password is invalid', async () => {
-    authRepository.findAccountByEmail.mockResolvedValue({
+    authRepository.findAccountByLoginIdentifier.mockResolvedValue({
       id: 'account-1',
       email: 'alice@example.com',
+      username: 'alice',
       passwordHash: 'hashed-password',
       tokenVersion: 0,
     });
@@ -120,25 +132,26 @@ describe('AuthService', () => {
 
     await expect(
       service.login({
-        email: 'alice@example.com',
+        identifier: 'alice',
         password: 'wrong-password',
       }, 'client-1'),
-    ).rejects.toThrow('邮箱或密码错误');
+    ).rejects.toThrow('用户名或密码错误');
 
     expect(jwtService.sign).not.toHaveBeenCalled();
   });
 
   it('returns token on successful login', async () => {
-    authRepository.findAccountByEmail.mockResolvedValue({
+    authRepository.findAccountByLoginIdentifier.mockResolvedValue({
       id: 'account-1',
       email: 'alice@example.com',
+      username: 'alice',
       passwordHash: 'hashed-password',
       tokenVersion: 0,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
     const result = await service.login({
-      email: 'alice@example.com',
+      identifier: 'alice',
       password: 'hunter2hunter2',
     }, 'client-1');
 
@@ -153,7 +166,22 @@ describe('AuthService', () => {
     });
     expect(result).toEqual({
       accessToken: 'signed-token',
-      account: { id: 'account-1', email: 'alice@example.com' },
+      account: { id: 'account-1', email: 'alice@example.com', username: 'alice' },
+    });
+  });
+
+  it('rejects registration when username is taken', async () => {
+    authRepository.findAccountByEmail.mockResolvedValue(null);
+    authRepository.findAccountByUsername.mockResolvedValue({ id: 'account-2' });
+    await expect(service.register({
+      username: 'alice', email: 'alice@example.com', password: 'hunter2hunter2', name: 'Alice',
+    })).rejects.toThrow('用户名已被使用');
+  });
+
+  it('sets a username for a legacy account', async () => {
+    authRepository.setUsername.mockResolvedValue({ id: 'account-1', email: 'alice@example.com', username: 'alice' });
+    await expect(service.setUsername('account-1', 'alice')).resolves.toEqual({
+      id: 'account-1', email: 'alice@example.com', username: 'alice',
     });
   });
 });

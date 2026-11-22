@@ -48,14 +48,11 @@ export default function LoginPage() {
         </Typography.Title>
         <Form layout="vertical" onFinish={onFinish} autoComplete="on">
           <Form.Item
-            label="邮箱"
-            name="email"
-            rules={[
-              { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '邮箱格式不正确' },
-            ]}
+            label="用户名或邮箱"
+            name="identifier"
+            rules={[{ required: true, message: '请输入用户名或邮箱' }]}
           >
-            <Input placeholder="you@example.com" autoComplete="email" />
+            <Input placeholder="用户名" autoComplete="username" />
           </Form.Item>
           <Form.Item
             label="密码"

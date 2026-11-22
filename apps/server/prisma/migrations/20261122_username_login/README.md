@@ -1,0 +1,1 @@
+Adds an optional unique username to Account. Existing account rows receive NULL and keep their email, password hash, tokens, and related medical data. New registrations set a username; existing accounts can set one after logging in.

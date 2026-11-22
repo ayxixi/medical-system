@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
+import * as bcrypt from 'bcryptjs';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { formatValidationErrors } from './common/utils/validation.util';
 import { AttachmentCleanupService } from './modules/file/attachment-cleanup.service';
@@ -78,6 +79,7 @@ describe('账号隔离 (e2e)', () => {
     const aliceRegister = await request(httpServer)
       .post('/auth/register')
       .send({
+        username: 'alice',
         email: 'alice@example.com',
         password: 'hunter2hunter2',
         name: 'Alice',
@@ -89,6 +91,7 @@ describe('账号隔离 (e2e)', () => {
     const bobRegister = await request(httpServer)
       .post('/auth/register')
       .send({
+        username: 'bob',
         email: 'bob@example.com',
         password: 'hunter2hunter2',
         name: 'Bob',
@@ -146,7 +149,7 @@ describe('账号隔离 (e2e)', () => {
 
   it('密码修改使已有访问令牌失效，新密码可登录并重置成功失败计数', async () => {
     const login = () => request(httpServer).post('/auth/login').send({
-      email: 'alice@example.com', password: 'hunter2hunter2',
+      identifier: 'alice', password: 'hunter2hunter2',
     });
     await login().expect(200);
 
@@ -159,7 +162,7 @@ describe('账号隔离 (e2e)', () => {
       .set('Authorization', `Bearer ${aliceToken}`).expect(401);
 
     const renewed = await request(httpServer).post('/auth/login').send({
-      email: 'alice@example.com', password: 'new-password-123',
+      identifier: 'alice@example.com', password: 'new-password-123',
     }).expect(200);
     await request(httpServer).get('/auth/me')
       .set('Authorization', `Bearer ${renewed.body.accessToken}`).expect(200);
@@ -169,18 +172,37 @@ describe('账号隔离 (e2e)', () => {
   it('登录失败达到上限后返回 429，成功后清除失败计数', async () => {
     for (let i = 0; i < 3; i += 1) {
       await request(httpServer).post('/auth/login').send({
-        email: 'bob@example.com', password: 'incorrect-password',
+        identifier: 'bob', password: 'incorrect-password',
       }).expect(401);
     }
     await request(httpServer).post('/auth/login').send({
-      email: 'bob@example.com', password: 'hunter2hunter2',
+      identifier: 'bob', password: 'hunter2hunter2',
     }).expect(429);
 
     const prisma = app.get(PrismaService);
     const attempt = await prisma.loginAttempt.findFirstOrThrow();
     await prisma.loginAttempt.delete({ where: { key: attempt.key } });
     await request(httpServer).post('/auth/login').send({
-      email: 'bob@example.com', password: 'hunter2hunter2',
+      identifier: 'bob@example.com', password: 'hunter2hunter2',
+    }).expect(200);
+  });
+
+  it('旧账号可用邮箱登录并设置用户名，之后可用用户名登录', async () => {
+    const prisma = app.get(PrismaService);
+    await prisma.account.create({ data: {
+      email: 'legacy@example.com',
+      passwordHash: await bcrypt.hash('legacy-password-123', 10),
+    } });
+    const legacyLogin = await request(httpServer).post('/auth/login').send({
+      identifier: 'legacy@example.com', password: 'legacy-password-123',
+    }).expect(200);
+    await request(httpServer).put('/auth/username')
+      .set('Authorization', `Bearer ${legacyLogin.body.accessToken}`)
+      .send({ username: 'legacy-user' })
+      .expect(200)
+      .expect(({ body }) => expect(body.username).toBe('legacy-user'));
+    await request(httpServer).post('/auth/login').send({
+      identifier: 'legacy-user', password: 'legacy-password-123',
     }).expect(200);
   });
 
@@ -194,9 +216,11 @@ describe('账号隔离 (e2e)', () => {
     );
     try {
       await request(httpServer).post('/auth/register').send({
+        username: 'invite-denied',
         email: 'invite-denied@example.com', password: 'password-123', name: 'No Code',
       }).expect(403);
       await request(httpServer).post('/auth/register').send({
+        username: 'invite-accepted',
         email: 'invite-accepted@example.com', password: 'password-123',
         name: 'Invite', inviteCode: 'beta-2026',
       }).expect(201);
