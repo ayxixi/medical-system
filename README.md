@@ -187,7 +187,7 @@ Authorization: Bearer <accessToken>
 - `GET /visits/:visitId/files`
 - `GET /files/:id/content`：下载当前账号所属的附件原件
 - `PUT /files/:id` 以新文件替换现有附件（先写入新文件并更新 DB，再删除旧文件）
-- `DELETE /files/:id`
+- `DELETE /files/:id`：删除附件记录，并登记物理文件清理
 
 ## 环境变量
 
@@ -316,6 +316,8 @@ npx prisma migrate deploy && npm run start:prod
   - `image/png`
   - `image/webp`
 
+在当前的 SQLite 单实例部署中，后台每 5 秒检查待清理任务，存储删除失败后约 1 分钟重试。清理任务与附件记录的删除或替换在同一 SQLite 事务中登记，待处理任务会保存在数据库中。每次写入原件前也会登记清理任务，提交附件记录后自动取消。失败任务立即进入队列。进程意外退出时，预登记任务在一小时宽限期后回收。现有数据库需先运行 `npm run prisma:migrate:deploy`，一键启动脚本会自动执行迁移。未来重建 `VisitFile` 表的迁移需同步重建清理触发器。
+
 ## S3 存储（可选）
 
 如果要改用 S3 或兼容 S3 的对象存储，请在 `.env` 中设置：
@@ -336,7 +338,7 @@ S3_SECRET_KEY=...
 - 上传文件会写入对象存储桶
 - 对象 key 仍使用 `{userId}/{visitId}/{storedFileName}` 的目录结构
 - `PUT /files/:id` 会先写入新对象并更新数据库，再删除旧对象，避免中间状态造成附件丢失
-- `DELETE /files/:id` 会同时删除对象存储中的文件对象
+- 删除附件、就诊或成员后，后台队列会按附件记录中的存储类型清理原件。删除失败会重试。
 
 如果未显式配置 `S3_ACCESS_KEY` 与 `S3_SECRET_KEY`，当前实现会回退到 AWS SDK 默认 credential chain，便于云上部署或使用本机已有凭证。
 

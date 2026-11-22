@@ -2,9 +2,7 @@ import type { Readable } from 'node:stream';
 
 export type SaveFileInput = {
   buffer: Buffer;
-  userId: string;
-  visitId: string;
-  originalName: string;
+  relativePath: string;
   mimeType: string;
 };
 
@@ -14,7 +12,7 @@ export type StoredFileDescriptor = {
 };
 
 export interface FileStorageService {
-  save(input: SaveFileInput): Promise<StoredFileDescriptor>;
+  save(input: SaveFileInput): Promise<void>;
   read(relativePath: string): Promise<Readable | null>;
   delete(relativePath: string): Promise<void>;
 }

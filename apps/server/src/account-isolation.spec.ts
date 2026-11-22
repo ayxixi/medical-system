@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { mkdtempSync, rmSync, unlinkSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -12,15 +12,16 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { formatValidationErrors } from './common/utils/validation.util';
+import { AttachmentCleanupService } from './modules/file/attachment-cleanup.service';
+import { FileRepository } from './modules/file/file.repository';
+import { LocalStorageService } from './modules/file/storage/local-storage.service';
 import { PrismaService } from './prisma/prisma.service';
-
-const TEST_DB_FILE = 'test-isolation.db';
-const TEST_DB_PATH = join(__dirname, '..', 'prisma', TEST_DB_FILE);
 
 jest.setTimeout(60000);
 
 describe('账号隔离 (e2e)', () => {
   let app: INestApplication;
+  let testRoot: string;
   let uploadPath: string;
   let httpServer: ReturnType<INestApplication['getHttpServer']>;
 
@@ -36,17 +37,18 @@ describe('账号隔离 (e2e)', () => {
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL = `file:${TEST_DB_PATH.split('\\').join('/')}`;
+    testRoot = mkdtempSync(join(tmpdir(), 'medical-attachments-'));
+    process.env.DATABASE_URL = `file:${join(testRoot, 'test.db').split('\\').join('/')}`;
     process.env.JWT_SECRET = 'test-secret-test-secret-test-secret';
     process.env.JWT_EXPIRES_IN = '1d';
     process.env.FILE_STORAGE = 'local';
-    uploadPath = mkdtempSync(join(tmpdir(), 'medical-attachments-'));
+    uploadPath = join(testRoot, 'uploads');
     process.env.UPLOAD_PATH = uploadPath;
     process.env.MAX_FILE_SIZE_MB = '10';
 
-    execSync('npx prisma db push --force-reset --skip-generate', {
-      stdio: 'ignore',
-      env: process.env,
+    execSync('npm run prisma:migrate:deploy', {
+      stdio: 'pipe',
+      env: { ...process.env, RUST_LOG: 'info' },
     });
 
     const { AppModule } = await import('./app.module');
@@ -135,13 +137,7 @@ describe('账号隔离 (e2e)', () => {
       await app.close();
     }
 
-    if (uploadPath) rmSync(uploadPath, { recursive: true, force: true });
-
-    try {
-      unlinkSync(TEST_DB_PATH);
-    } catch {
-      // ignore
-    }
+    if (testRoot) rmSync(testRoot, { recursive: true, force: true });
   });
 
   it('未携带 token 时拒绝访问受保护接口', async () => {
@@ -284,6 +280,86 @@ describe('账号隔离 (e2e)', () => {
 
     unlinkSync(join(uploadPath, uploaded.body.relativePath));
     await request(httpServer).get(url).set('Authorization', `Bearer ${aliceToken}`).expect(404);
+  });
+
+  it('附件替换、删除就诊和删除成员时清理原件，失败可重试', async () => {
+    const auth = `Bearer ${aliceToken}`;
+    const visit = await request(httpServer)
+      .post('/visits').set('Authorization', auth)
+      .send({ userId: aliceUserId, date: '2026-04-04T00:00:00.000Z' }).expect(201);
+    const upload = async (visitId: string) => {
+      const result = await request(httpServer).post('/files/upload').set('Authorization', auth)
+        .field('visitId', visitId)
+        .attach('file', Buffer.from('%PDF-1.4 fixture'), { filename: 'report.pdf', contentType: 'application/pdf' })
+        .expect(201);
+      return result.body;
+    };
+    const first = await upload(visit.body.id);
+    const prisma = app.get(PrismaService);
+    const cleanup = app.get(AttachmentCleanupService);
+    expect(await prisma.attachmentCleanup.count()).toBe(0);
+
+    const replace = (content: string) => request(httpServer)
+      .put(`/files/${first.id}`).set('Authorization', auth)
+      .attach('file', Buffer.from(content), { filename: 'report.pdf', contentType: 'application/pdf' });
+    const failWrite = jest.spyOn(app.get(FileRepository), 'updateById')
+      .mockRejectedValueOnce(new Error('metadata temporarily unavailable'));
+    try {
+      await replace('%PDF-1.4 failed').expect(500);
+      const queued = await prisma.attachmentCleanup.findMany();
+      expect(queued).toHaveLength(1);
+      expect(existsSync(join(uploadPath, queued[0].relativePath))).toBe(true);
+      await cleanup.runPending();
+      expect(existsSync(join(uploadPath, queued[0].relativePath))).toBe(false);
+      expect(existsSync(join(uploadPath, first.relativePath))).toBe(true);
+      await request(httpServer).get(`/files/${first.id}/content`).set('Authorization', auth).expect(200);
+    } finally {
+      failWrite.mockRestore();
+    }
+
+    const replacements = await Promise.all([
+      replace('%PDF-1.4 first').expect(200),
+      replace('%PDF-1.4 second').expect(200),
+    ]);
+    const current = await prisma.visitFile.findUniqueOrThrow({ where: { id: first.id } });
+    const obsolete = replacements.map(({ body }) => body.relativePath)
+      .find((path) => path !== current.relativePath);
+    expect(obsolete).toBeDefined();
+
+    await cleanup.runPending();
+    expect(existsSync(join(uploadPath, first.relativePath))).toBe(false);
+    expect(existsSync(join(uploadPath, obsolete))).toBe(false);
+    expect(existsSync(join(uploadPath, current.relativePath))).toBe(true);
+
+    const deleteObject = jest.spyOn(app.get(LocalStorageService), 'delete')
+      .mockRejectedValueOnce(new Error('storage temporarily unavailable'));
+    try {
+      await request(httpServer).delete(`/visits/${visit.body.id}`).set('Authorization', auth).expect(204);
+      await cleanup.runPending();
+      expect(existsSync(join(uploadPath, current.relativePath))).toBe(true);
+      await prisma.attachmentCleanup.updateMany({
+        where: { relativePath: current.relativePath, nextAttemptAt: { gt: BigInt(Date.now()) } },
+        data: { nextAttemptAt: 0n },
+      }).then(({ count }) => expect(count).toBe(1));
+      await cleanup.runPending();
+      expect(existsSync(join(uploadPath, current.relativePath))).toBe(false);
+    } finally {
+      deleteObject.mockRestore();
+    }
+
+    const member = await request(httpServer).post('/users').set('Authorization', auth)
+      .send({ name: '临时测试成员' }).expect(201);
+    const memberVisit = await request(httpServer).post('/visits').set('Authorization', auth)
+      .send({ userId: member.body.id, date: '2026-04-04T00:00:00.000Z' }).expect(201);
+    const memberFile = await upload(memberVisit.body.id);
+    const single = await upload(memberVisit.body.id);
+    await request(httpServer).delete(`/files/${single.id}`)
+      .set('Authorization', `Bearer ${bobToken}`).expect(404);
+    await request(httpServer).delete(`/files/${single.id}`).set('Authorization', auth).expect(200);
+    await request(httpServer).delete(`/users/${member.body.id}`).set('Authorization', auth).expect(204);
+    await cleanup.runPending();
+    expect(existsSync(join(uploadPath, memberFile.relativePath))).toBe(false);
+    expect(existsSync(join(uploadPath, single.relativePath))).toBe(false);
   });
 
   it('账号下至少保留一个用户：删除唯一用户应返回 400', async () => {

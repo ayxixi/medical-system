@@ -40,7 +40,7 @@ npm test -- --runInBand
 1. 环境变量缺失
    - 检查 `JWT_SECRET`、`DATABASE_URL`、`FILE_STORAGE` 等配置是否已注入。
 2. 测试库初始化耗时较长
-   - 账号隔离 e2e 测试会执行 Prisma 数据库重置，耗时高于普通单测。
+   - 账号隔离 e2e 测试会在独立临时目录应用 Prisma 迁移，验证实际迁移中的 SQLite 触发器。
 3. 终端工作目录错误
    - 执行测试前需确认当前目录为 `apps/server/`。
 

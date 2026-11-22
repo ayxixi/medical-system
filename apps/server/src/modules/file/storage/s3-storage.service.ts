@@ -8,11 +8,9 @@ import {
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Readable } from 'node:stream';
-import * as path from 'node:path';
 import {
   FileStorageService,
   SaveFileInput,
-  StoredFileDescriptor,
 } from './storage.interface';
 
 @Injectable()
@@ -21,25 +19,13 @@ export class S3StorageService implements FileStorageService, OnModuleDestroy {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async save(input: SaveFileInput): Promise<StoredFileDescriptor> {
-    const safeUserId = this.sanitizePathSegment(input.userId);
-    const safeVisitId = this.sanitizePathSegment(input.visitId);
-    const storedName = this.buildStoredName(input.originalName);
-    const relativePath = path.posix.join(safeUserId, safeVisitId, storedName);
-
-    const client = this.getClient();
-    const bucket = this.getRequiredConfig('S3_BUCKET');
-
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: relativePath,
-        Body: input.buffer,
-        ContentType: input.mimeType,
-      }),
-    );
-
-    return { storedName, relativePath };
+  async save(input: SaveFileInput): Promise<void> {
+    await this.getClient().send(new PutObjectCommand({
+      Bucket: this.getRequiredConfig('S3_BUCKET'),
+      Key: input.relativePath,
+      Body: input.buffer,
+      ContentType: input.mimeType,
+    }));
   }
 
   async read(relativePath: string) {
@@ -57,7 +43,7 @@ export class S3StorageService implements FileStorageService, OnModuleDestroy {
   }
 
   async delete(relativePath: string): Promise<void> {
-    if (!relativePath || relativePath.includes('..')) {
+    if (relativePath.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
       throw new Error('拒绝删除包含不安全对象键的文件');
     }
 
@@ -112,20 +98,5 @@ export class S3StorageService implements FileStorageService, OnModuleDestroy {
     }
 
     return value;
-  }
-
-  private sanitizePathSegment(value: string): string {
-    return value.replace(/[^a-zA-Z0-9_-]/g, '_');
-  }
-
-  private buildStoredName(originalName: string): string {
-    const extension = path.extname(originalName).toLowerCase();
-    const baseName = path.basename(originalName, extension);
-    const safeBaseName = baseName
-      .replace(/[^a-zA-Z0-9._-]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '');
-
-    return `${Date.now()}-${safeBaseName || 'file'}${extension}`;
   }
 }
