@@ -265,6 +265,13 @@ def main():
         parser.error("后端端口须在 1–65535 范围内，且不能与前端或已启用的识别服务重复。")
     backend_url = f"http://127.0.0.1:{backend_port}"
     acquire_start_lock()
+    if WINDOWS:
+        from windows_job import bind_launcher_lifetime
+
+        try:
+            bind_launcher_lifetime()
+        except OSError as exc:
+            raise RuntimeError(f"无法启用 Windows 服务自动清理：{exc}") from exc
 
     node = shutil.which("node")
     npm = shutil.which("npm.cmd" if WINDOWS else "npm")
