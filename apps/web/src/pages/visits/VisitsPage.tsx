@@ -294,10 +294,10 @@ export default function VisitsPage() {
             <Form.Item name="note" noStyle>
               <Input.TextArea rows={3} maxLength={1000} />
             </Form.Item>
-            <RecognitionInputActions
+            {creating && <RecognitionInputActions
               getCurrentText={() => form.getFieldValue('note')}
               onText={(note) => form.setFieldValue('note', note)}
-            />
+            />}
           </Form.Item>
         </Form>
       </Modal>

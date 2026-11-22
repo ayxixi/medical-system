@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert, App as AntdApp, Button, Space, Typography } from 'antd';
 import { AudioOutlined, CameraOutlined, StopOutlined } from '@ant-design/icons';
 import { extractErrorMessage } from '@/api/client';
@@ -53,14 +53,23 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
   const chunks = useRef<Blob[]>([]);
   const stopTimer = useRef<number | undefined>(undefined);
 
-  useEffect(() => () => {
-    if (stopTimer.current) window.clearTimeout(stopTimer.current);
-    if (recorder.current && recorder.current.state !== 'inactive') {
-      recorder.current.onstop = null;
-      recorder.current.stop();
-    }
-    recorder.current?.stream.getTracks().forEach((track) => track.stop());
-    stream.current?.getTracks().forEach((track) => track.stop());
+  const lifetime = useRef<AbortController | null>(null);
+
+  useLayoutEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    return () => {
+      controller.abort();
+      if (stopTimer.current) window.clearTimeout(stopTimer.current);
+      const activeRecorder = recorder.current;
+      if (activeRecorder) {
+        activeRecorder.onstop = null;
+        activeRecorder.onerror = null;
+        activeRecorder.ondataavailable = null;
+        if (activeRecorder.state !== 'inactive') activeRecorder.stop();
+      }
+      stream.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const fillText = (text: string) => {
@@ -79,7 +88,8 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
   };
 
   const runImage = async (file?: File) => {
-    if (!file) return;
+    const signal = lifetime.current?.signal;
+    if (!file || !signal || signal.aborted) return;
     setFailure(undefined);
     setBusy(true);
     try {
@@ -87,11 +97,13 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
         if (error instanceof DOMException) throw new Error('无法读取这张图片，请改用 JPEG 或 PNG。');
         throw error;
       });
-      fillText(await recognizeImage(prepared));
+      if (signal.aborted) return;
+      const text = await recognizeImage(prepared, signal);
+      if (!signal.aborted) fillText(text);
     } catch (error) {
-      setFailure(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
+      if (!signal.aborted) setFailure(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   };
 
@@ -101,7 +113,8 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     void runImage(file);
   };
 
-  const uploadRecording = async (blob: Blob) => {
+  const uploadRecording = async (blob: Blob, signal: AbortSignal) => {
+    if (signal.aborted) return;
     if (!blob.size) {
       message.warning('录音为空，请重新录制。');
       return;
@@ -113,11 +126,12 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     setFailure(undefined);
     setBusy(true);
     try {
-      fillText(await transcribeAudio(blob));
+      const text = await transcribeAudio(blob, signal);
+      if (!signal.aborted) fillText(text);
     } catch (error) {
-      setFailure(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
+      if (!signal.aborted) setFailure(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   };
 
@@ -128,12 +142,19 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
   };
 
   const startRecording = async () => {
+    const signal = lifetime.current?.signal;
+    if (!signal || signal.aborted) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       message.error('当前浏览器不支持录音，请使用 HTTPS 或选择支持录音的浏览器。');
       return;
     }
+    setBusy(true);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (signal.aborted) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       stream.current = mediaStream;
       const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
         .find((type) => MediaRecorder.isTypeSupported(type));
@@ -146,6 +167,8 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
         if (event.data.size) chunks.current.push(event.data);
       };
       activeRecorder.onerror = () => {
+        window.clearTimeout(stopTimer.current);
+        stopTimer.current = undefined;
         activeRecorder.onstop = null;
         mediaStream.getTracks().forEach((track) => track.stop());
         stream.current = null;
@@ -159,13 +182,17 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
         mediaStream.getTracks().forEach((track) => track.stop());
         stream.current = null;
         setRecording(false);
-        void uploadRecording(recordingBlob);
+        void uploadRecording(recordingBlob, signal);
       };
       activeRecorder.start();
       setRecording(true);
       stopTimer.current = window.setTimeout(stopRecording, MAX_RECORDING_MS);
     } catch {
-      message.error('无法访问麦克风，请检查浏览器权限或继续手动录入。');
+      stream.current?.getTracks().forEach((track) => track.stop());
+      stream.current = null;
+      if (!signal.aborted) message.error('无法访问麦克风，请检查浏览器权限或继续手动录入。');
+    } finally {
+      if (!signal.aborted) setBusy(false);
     }
   };
 
