@@ -39,12 +39,16 @@ async function prepareImage(file: File): Promise<File> {
   }
 }
 
+type ImageSource = 'camera' | 'album';
+type PendingAction = ImageSource | 'microphone' | 'transcription';
+
 const MAX_RECORDING_MS = 60_000;
 
 export function RecognitionInputActions({ getCurrentText, onText, disabled = false }: Props) {
   const { message } = AntdApp.useApp();
   const [failure, setFailure] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>();
+  const busy = pendingAction !== undefined;
   const [recording, setRecording] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -87,11 +91,11 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     message.success('识别结果已填入，可修改后再保存。');
   };
 
-  const runImage = async (file?: File) => {
+  const runImage = async (source: ImageSource, file?: File) => {
     const signal = lifetime.current?.signal;
     if (!file || !signal || signal.aborted) return;
     setFailure(undefined);
-    setBusy(true);
+    setPendingAction(source);
     try {
       const prepared = await prepareImage(file).catch((error: unknown) => {
         if (error instanceof DOMException) throw new Error('无法读取这张图片，请改用 JPEG 或 PNG。');
@@ -103,14 +107,14 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     } catch (error) {
       if (!signal.aborted) setFailure(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
     } finally {
-      if (!signal.aborted) setBusy(false);
+      if (!signal.aborted) setPendingAction(undefined);
     }
   };
 
-  const selectImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const selectImage = (event: React.ChangeEvent<HTMLInputElement>, source: ImageSource) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
-    void runImage(file);
+    void runImage(source, file);
   };
 
   const uploadRecording = async (blob: Blob, signal: AbortSignal) => {
@@ -124,14 +128,14 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
       return;
     }
     setFailure(undefined);
-    setBusy(true);
+    setPendingAction('transcription');
     try {
       const text = await transcribeAudio(blob, signal);
       if (!signal.aborted) fillText(text);
     } catch (error) {
       if (!signal.aborted) setFailure(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
     } finally {
-      if (!signal.aborted) setBusy(false);
+      if (!signal.aborted) setPendingAction(undefined);
     }
   };
 
@@ -148,7 +152,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
       message.error('当前浏览器不支持录音，请使用 HTTPS 或选择支持录音的浏览器。');
       return;
     }
-    setBusy(true);
+    setPendingAction('microphone');
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (signal.aborted) {
@@ -192,19 +196,20 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
       stream.current = null;
       if (!signal.aborted) message.error('无法访问麦克风，请检查浏览器权限或继续手动录入。');
     } finally {
-      if (!signal.aborted) setBusy(false);
+      if (!signal.aborted) setPendingAction(undefined);
     }
   };
 
   return (
     <Space direction="vertical" size={4} style={{ width: '100%', marginTop: 8 }}>
       <Space wrap>
-        <input ref={imageInput} type="file" accept="image/*" hidden onChange={selectImage} />
-        <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={selectImage} />
+        <input ref={imageInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(event) => selectImage(event, 'album')} />
+        <input ref={cameraInput} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(event) => selectImage(event, 'camera')} />
         <Button
           htmlType="button"
           icon={<CameraOutlined />}
           disabled={disabled || busy || recording}
+          loading={pendingAction === 'camera'}
           onClick={() => cameraInput.current?.click()}
         >
           拍照识别
@@ -212,6 +217,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
         <Button
           htmlType="button"
           disabled={disabled || busy || recording}
+          loading={pendingAction === 'album'}
           onClick={() => imageInput.current?.click()}
         >
           从相册选图
@@ -226,7 +232,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
             size="small"
             icon={<AudioOutlined />}
             disabled={disabled || busy}
-            loading={busy}
+            loading={pendingAction === 'microphone' || pendingAction === 'transcription'}
             onClick={() => void startRecording()}
           >
             录音转文字
@@ -236,7 +242,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
       {failure && <Alert type="error" message={failure} showIcon />}
       {busy && <Typography.Text role="status">正在处理媒体并识别，请稍候…</Typography.Text>}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        媒体最长 60 秒、最大 10 MB，仅发送到管理员配置的本机识别服务；结果可编辑，不会自动保存。
+        照片和录音仅用于识别。识别结果可修改，随表单保存。录音最长 60 秒，识别上传上限 10 MB。
       </Typography.Text>
     </Space>
   );

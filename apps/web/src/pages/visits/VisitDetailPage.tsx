@@ -488,7 +488,7 @@ export default function VisitDetailPage() {
         extra={
           <Upload {...uploadProps}>
             <Button size="small" type="primary" icon={<UploadOutlined />}>
-              上传文件
+              添加附件
             </Button>
           </Upload>
         }
