@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AttachmentCleanupService } from './attachment-cleanup.service';
 import { FileController } from './file.controller';
 import { FileRepository } from './file.repository';
 import { FileService } from './file.service';
@@ -10,6 +11,7 @@ import { FILE_STORAGE_SERVICE } from './storage/storage.interface';
 @Module({
   controllers: [FileController],
   providers: [
+    AttachmentCleanupService,
     FileService,
     FileRepository,
     LocalStorageService,

@@ -14,9 +14,9 @@ describe('FileService', () => {
     updateById: jest.Mock;
   };
   let getConfig: jest.Mock;
+  let trackWrite: jest.Mock;
   let storageService: {
     save: jest.Mock;
-    delete: jest.Mock;
   };
 
   function createFile(overrides?: Partial<{ originalname: string; mimetype: string; size: number; buffer?: Buffer }>) {
@@ -52,15 +52,16 @@ describe('FileService', () => {
 
     storageService = {
       save: jest.fn(),
-      delete: jest.fn(),
     };
 
+    trackWrite = jest.fn((_provider, _path, write) => write());
     service = new FileService(
       fileRepository as unknown as FileRepository,
       { get: getConfig } as unknown as ConfigService,
       storageService as unknown as FileStorageService,
       {} as ConstructorParameters<typeof FileService>[3],
       {} as ConstructorParameters<typeof FileService>[4],
+      { trackWrite } as unknown as ConstructorParameters<typeof FileService>[5],
     );
   });
 
@@ -87,10 +88,6 @@ describe('FileService', () => {
       id: 'visit-1',
       userId: 'user-1',
     });
-    storageService.save.mockResolvedValue({
-      storedName: 'stored-report.pdf',
-      relativePath: 'user-1/visit-1/stored-report.pdf',
-    });
     fileRepository.create.mockResolvedValue({ id: 'file-1' });
 
     const result = await service.upload('account-1', createFile(), {
@@ -99,16 +96,14 @@ describe('FileService', () => {
 
     expect(storageService.save).toHaveBeenCalledWith({
       buffer: Buffer.from('content'),
-      userId: 'user-1',
-      visitId: 'visit-1',
-      originalName: 'report.pdf',
+      relativePath: expect.stringMatching(/^user-1\/visit-1\/.+\.pdf$/),
       mimeType: 'application/pdf',
     });
     expect(fileRepository.create).toHaveBeenCalledWith({
       visitId: 'visit-1',
       originalName: 'report.pdf',
-      storedName: 'stored-report.pdf',
-      relativePath: 'user-1/visit-1/stored-report.pdf',
+      storedName: expect.stringMatching(/\.pdf$/),
+      relativePath: storageService.save.mock.calls[0][0].relativePath,
       mimeType: 'application/pdf',
       size: 1024,
       storageProvider: 'local',
@@ -116,77 +111,39 @@ describe('FileService', () => {
     expect(result).toEqual({ id: 'file-1' });
   });
 
-  it('removes stored file and database record', async () => {
-    fileRepository.findByIdForAccount.mockResolvedValue({
-      id: 'file-1',
-      relativePath: 'user-1/visit-1/old-report.pdf',
-    });
+  it('removes metadata so database triggers can queue cleanup atomically', async () => {
+    fileRepository.findByIdForAccount.mockResolvedValue({ id: 'file-1' });
     fileRepository.deleteById.mockResolvedValue({ id: 'file-1' });
 
-    const result = await service.remove('account-1', 'file-1');
-
-    expect(storageService.delete).toHaveBeenCalledWith(
-      'user-1/visit-1/old-report.pdf',
-    );
+    await expect(service.remove('account-1', 'file-1')).resolves.toEqual({ id: 'file-1' });
     expect(fileRepository.deleteById).toHaveBeenCalledWith('file-1');
-    expect(result).toEqual({ id: 'file-1' });
+    expect(trackWrite).not.toHaveBeenCalled();
   });
 
-  it('replaces file and deletes old object after updating database', async () => {
+  it('queues the new key if replacing metadata fails', async () => {
     fileRepository.findByIdForAccount.mockResolvedValue({
       id: 'file-1',
       visitId: 'visit-1',
-      relativePath: 'user-1/visit-1/old-report.pdf',
+      relativePath: 'user-1/visit-1/old.pdf',
     });
-    fileRepository.findVisitByIdForAccount.mockResolvedValue({
-      id: 'visit-1',
-      userId: 'user-1',
-    });
-    storageService.save.mockResolvedValue({
-      storedName: 'new-report.pdf',
-      relativePath: 'user-1/visit-1/new-report.pdf',
-    });
-    fileRepository.updateById.mockResolvedValue({ id: 'file-1' });
+    fileRepository.findVisitByIdForAccount.mockResolvedValue({ id: 'visit-1', userId: 'user-1' });
+    const error = new Error('metadata write failed');
+    fileRepository.updateById.mockRejectedValue(error);
 
-    const result = await service.replace('account-1', 'file-1', createFile());
-
-    expect(fileRepository.updateById).toHaveBeenCalledWith('file-1', {
-      originalName: 'report.pdf',
-      storedName: 'new-report.pdf',
-      relativePath: 'user-1/visit-1/new-report.pdf',
-      mimeType: 'application/pdf',
-      size: 1024,
-      storageProvider: 'local',
-    });
-    expect(fileRepository.updateById.mock.invocationCallOrder[0]).toBeLessThan(
-      storageService.delete.mock.invocationCallOrder[0],
-    );
-    expect(storageService.delete).toHaveBeenCalledWith(
-      'user-1/visit-1/old-report.pdf',
-    );
-    expect(result).toEqual({ id: 'file-1' });
+    await expect(service.replace('account-1', 'file-1', createFile())).rejects.toBe(error);
+    const key = storageService.save.mock.calls[0][0].relativePath;
+    expect(key).not.toBe('user-1/visit-1/old.pdf');
+    expect(trackWrite).toHaveBeenCalledWith('local', key, expect.any(Function));
   });
 
-  it('returns updated record even if old file cleanup fails during replace', async () => {
-    fileRepository.findByIdForAccount.mockResolvedValue({
-      id: 'file-1',
-      visitId: 'visit-1',
-      relativePath: 'user-1/visit-1/old-report.pdf',
-    });
-    fileRepository.findVisitByIdForAccount.mockResolvedValue({
-      id: 'visit-1',
-      userId: 'user-1',
-    });
-    storageService.save.mockResolvedValue({
-      storedName: 'new-report.pdf',
-      relativePath: 'user-1/visit-1/new-report.pdf',
-    });
-    fileRepository.updateById.mockResolvedValue({ id: 'file-1', updated: true });
-    storageService.delete.mockRejectedValueOnce(new Error('cleanup failed'));
+  it('queues the attempted object key if a storage write fails', async () => {
+    fileRepository.findVisitByIdForAccount.mockResolvedValue({ id: 'visit-1', userId: 'user-1' });
+    const error = new Error('storage write failed');
+    storageService.save.mockRejectedValue(error);
 
-    await expect(
-      service.replace('account-1', 'file-1', createFile()),
-    ).resolves.toEqual({ id: 'file-1', updated: true });
+    await expect(service.upload('account-1', createFile(), { visitId: 'visit-1' })).rejects.toBe(error);
+    expect(fileRepository.create).not.toHaveBeenCalled();
+    expect(trackWrite).toHaveBeenCalledWith('local', storageService.save.mock.calls[0][0].relativePath, expect.any(Function));
   });
 
   it('throws when replace target file does not belong to current account', async () => {

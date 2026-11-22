@@ -4,7 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
+import { AttachmentCleanupService } from './attachment-cleanup.service';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileRepository } from './file.repository';
 import {
@@ -14,6 +16,7 @@ import {
 
 import { LocalStorageService } from './storage/local-storage.service';
 import { S3StorageService } from './storage/s3-storage.service';
+import { createStorageKey } from './storage/storage-key';
 
 const ACCEPTED_MIME_TYPES = new Set([
   'application/pdf',
@@ -38,6 +41,7 @@ export class FileService {
     private readonly storageService: FileStorageService,
     private readonly localStorage: LocalStorageService,
     private readonly s3Storage: S3StorageService,
+    private readonly cleanup: AttachmentCleanupService,
   ) {}
 
   async upload(
@@ -64,23 +68,9 @@ export class FileService {
       throw new NotFoundException('就诊记录不存在');
     }
 
-    const storedFile = await this.storageService.save({
-      buffer: file.buffer,
-      userId: visit.userId,
-      visitId: visit.id,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-    });
-
-    return this.fileRepository.create({
-      visitId: visit.id,
-      originalName: file.originalname,
-      storedName: storedFile.storedName,
-      relativePath: storedFile.relativePath,
-      mimeType: file.mimetype,
-      size: file.size,
-      storageProvider: this.configService.get<string>('FILE_STORAGE', 'local'),
-    });
+    return this.store(file, file.buffer, visit, (metadata) =>
+      this.fileRepository.create({ visitId: visit.id, ...metadata }),
+    );
   }
 
   async findManyByVisitId(accountId: string, visitId: string) {
@@ -113,9 +103,12 @@ export class FileService {
       throw new NotFoundException('文件不存在');
     }
 
-    await this.storageService.delete(file.relativePath);
-
-    return this.fileRepository.deleteById(id);
+    try {
+      return await this.fileRepository.deleteById(id);
+    } catch (error) {
+      this.throwIfMissing(error);
+      throw error;
+    }
   }
 
   async replace(
@@ -148,31 +141,51 @@ export class FileService {
       throw new NotFoundException('就诊记录不存在');
     }
 
-    const storedFile = await this.storageService.save({
-      buffer: file.buffer,
-      userId: visit.userId,
-      visitId: visit.id,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-    });
-
-    const updated = await this.fileRepository.updateById(id, {
-      originalName: file.originalname,
-      storedName: storedFile.storedName,
-      relativePath: storedFile.relativePath,
-      mimeType: file.mimetype,
-      size: file.size,
-      storageProvider: this.configService.get<string>('FILE_STORAGE', 'local'),
-    });
-
-    // 在 DB 更新成功后再删除旧文件，避免中间状态导致文件丢失
     try {
-      await this.storageService.delete(existing.relativePath);
-    } catch {
-      // 旧文件删除失败不影响业务，仅遗留孤儿文件，依赖后续清理
+      return await this.store(file, file.buffer, visit, (metadata) =>
+        this.fileRepository.updateById(id, metadata),
+      );
+    } catch (error) {
+      this.throwIfMissing(error);
+      throw error;
     }
+  }
 
-    return updated;
+  private async store<T>(
+    file: UploadedFilePayload,
+    buffer: Buffer,
+    visit: { id: string; userId: string },
+    persist: (metadata: {
+      storedName: string;
+      relativePath: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      storageProvider: string;
+    }) => Promise<T>,
+  ): Promise<T> {
+    const stored = createStorageKey(visit.userId, visit.id, file.originalname);
+    const storageProvider = this.configService.get<string>('FILE_STORAGE', 'local');
+    return this.cleanup.trackWrite(storageProvider, stored.relativePath, async () => {
+      await this.storageService.save({
+        buffer,
+        relativePath: stored.relativePath,
+        mimeType: file.mimetype,
+      });
+      return persist({
+        ...stored,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        storageProvider,
+      });
+    });
+  }
+
+  private throwIfMissing(error: unknown): void {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      throw new NotFoundException('文件不存在');
+    }
   }
 
   private validateFile(file: UploadedFilePayload): void {

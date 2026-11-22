@@ -86,4 +86,14 @@ model VisitFile {
   visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   @@index([visitId])
+  @@index([storageProvider, relativePath])
+}
+
+model AttachmentCleanup {
+  storageProvider String
+  relativePath    String
+  nextAttemptAt   BigInt @default(0)
+
+  @@id([storageProvider, relativePath])
+  @@index([nextAttemptAt])
 }
