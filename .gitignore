@@ -21,3 +21,7 @@ apps/server/prisma/local-dev.db*
 # 用户上传文件（保留目录占位）
 apps/server/uploads/*
 !apps/server/uploads/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
