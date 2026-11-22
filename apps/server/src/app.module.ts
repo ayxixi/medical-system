@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { HealthController } from './health.controller';
 import { EnvModule } from './config/env.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuditInterceptor } from './modules/audit/audit.interceptor';
+import { ExportModule } from './modules/export/export.module';
 import { FileModule } from './modules/file/file.module';
 import { MedicationModule } from './modules/medication/medication.module';
 import { RecordModule } from './modules/record/record.module';
@@ -16,6 +19,8 @@ import { PrismaModule } from './prisma/prisma.module';
     EnvModule,
     PrismaModule,
     AuthModule,
+    AuditModule,
+    ExportModule,
     UserModule,
     VisitModule,
     RecordModule,
@@ -27,6 +32,10 @@ import { PrismaModule } from './prisma/prisma.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })

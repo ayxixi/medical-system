@@ -25,7 +25,7 @@
 | 附件清理与重试 | 已实现 | SQLite 事务登记删除和替换，后台清理并重试。S3 / MinIO 待联调 |
 | 单元测试补齐 | 🟡 已开始 | service / repository 已覆盖 auth、user、visit、record、medication、file；另覆盖附件清理队列。存储服务、控制器和异常/边界分支仍可继续补齐 |
 | Phase 3：Postgres + S3 | 🟡 已部分完成 | `S3StorageService` 已实现，仍需切换 datasource 并完成 Postgres / MinIO 实测 |
-| Phase 4：审计日志 / 备份导出 | ⬜ 待开始 | 操作审计、按账号导出数据 |
+| Phase 4：审计日志 / 备份导出 | 🟡 部分完成 | 操作审计与按账号 JSON 导出已实现；仍需评估 ZIP 附件打包和导入恢复流程 |
 
 ## 二、近期完成清单
 
@@ -52,8 +52,9 @@
    - docker-compose 启 Postgres，切换 `DATABASE_URL`
    - 设置 `STORAGE_DRIVER=s3`，配 MinIO 验证 `S3StorageService`
 3. **Phase 4：审计日志 / 备份导出**
-   - 新增 `AuditLog` 表与拦截器
-   - 提供 `GET /export` 按账号导出 JSON
+   - ✅ 新增 `AuditLog` 表与全局拦截器（仅业务写操作元数据）
+   - ✅ 提供 `GET /export` 按账号导出 JSON 与附件元数据
+   - 后续：可选附件原件打包导出、版本化数据导入/恢复和审计管理界面
 
 ## 四、维护约定
 
