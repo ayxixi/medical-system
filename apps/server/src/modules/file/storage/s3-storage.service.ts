@@ -1,10 +1,13 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Readable } from 'node:stream';
 import * as path from 'node:path';
 import {
   FileStorageService,
@@ -37,6 +40,20 @@ export class S3StorageService implements FileStorageService, OnModuleDestroy {
     );
 
     return { storedName, relativePath };
+  }
+
+  async read(relativePath: string) {
+    try {
+      const { Body } = await this.getClient().send(new GetObjectCommand({
+        Bucket: this.getRequiredConfig('S3_BUCKET'),
+        Key: relativePath,
+      }));
+      if (!(Body instanceof Readable)) throw new Error('S3 未返回可读文件流');
+      return Body;
+    } catch (error) {
+      if (error instanceof NoSuchKey) return null;
+      throw error;
+    }
   }
 
   async delete(relativePath: string): Promise<void> {

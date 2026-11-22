@@ -185,6 +185,7 @@ Authorization: Bearer <accessToken>
 
 - `POST /files/upload`
 - `GET /visits/:visitId/files`
+- `GET /files/:id/content`：下载当前账号所属的附件原件
 - `PUT /files/:id` 以新文件替换现有附件（先写入新文件并更新 DB，再删除旧文件）
 - `DELETE /files/:id`
 

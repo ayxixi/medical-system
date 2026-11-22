@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   App as AntdApp,
   Button,
@@ -33,8 +33,25 @@ import {
   type CreateMedicationPayload,
   type UpdateMedicationPayload,
 } from '@/api/medications';
-import { deleteFile, replaceFile, uploadFile } from '@/api/files';
+import { deleteFile, readFile, replaceFile, uploadFile } from '@/api/files';
 import { extractErrorMessage } from '@/api/client';
+
+const PREVIEW_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+
+function AttachmentPreview({ file, blob }: { file: VisitFile; blob: Blob }) {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(blob.slice(0, blob.size, file.mimeType));
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob, file.mimeType]);
+
+  if (!url) return <Spin />;
+  if (file.mimeType === 'application/pdf') {
+    return <Button href={url} target="_blank" rel="noopener noreferrer">在新标签页打开 PDF</Button>;
+  }
+  return <img src={url} alt={file.originalName} style={{ maxWidth: '100%', maxHeight: '65vh' }} />;
+}
 
 interface RecordFormValues {
   diagnosis: string;
@@ -182,6 +199,34 @@ export default function VisitDetailPage() {
   };
 
   // Files
+  const [preview, setPreview] = useState<{ file: VisitFile; blob: Blob }>();
+  const fileReadMutation = useMutation({
+    mutationFn: async ({ file, mode }: { file: VisitFile; mode: 'download' | 'preview' }) => {
+      const blob = await readFile(file.id);
+      if (mode === 'preview' && file.mimeType === 'application/pdf') {
+        if (!(await blob.slice(0, 5).text()).startsWith('%PDF-')) {
+          throw new Error('附件内容不是有效的 PDF 文件');
+        }
+      }
+      return { file, mode, blob };
+    },
+    onSuccess: ({ file, mode, blob }) => {
+      if (mode === 'preview') {
+        setPreview({ file, blob });
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.originalName;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '无法获取附件，请重试')),
+  });
+
   const fileDeleteMutation = useMutation({
     mutationFn: deleteFile,
     onSuccess: () => {
@@ -374,6 +419,16 @@ export default function VisitDetailPage() {
           renderItem={(file) => (
             <List.Item
               actions={[
+                <Button key="download" size="small" disabled={fileReadMutation.isPending}
+                  onClick={() => fileReadMutation.mutate({ file, mode: 'download' })}>
+                  下载
+                </Button>,
+                ...(PREVIEW_TYPES.has(file.mimeType) ? [
+                  <Button key="preview" size="small" disabled={fileReadMutation.isPending}
+                    onClick={() => fileReadMutation.mutate({ file, mode: 'preview' })}>
+                    预览
+                  </Button>,
+                ] : []),
                 <Upload key="replace" {...buildReplaceUploadProps(file.id)}>
                   <Button size="small" loading={fileReplaceMutation.isPending}>
                     替换
@@ -402,6 +457,11 @@ export default function VisitDetailPage() {
           )}
         />
       </Card>
+
+      <Modal open={!!preview} title={preview?.file.originalName} footer={null}
+        onCancel={() => setPreview(undefined)}>
+        {preview && <AttachmentPreview file={preview.file} blob={preview.blob} />}
+      </Modal>
 
       <Modal
         title={recordModal.editing ? '编辑诊断' : '新增诊断'}
