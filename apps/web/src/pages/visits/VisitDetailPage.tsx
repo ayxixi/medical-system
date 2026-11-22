@@ -3,6 +3,7 @@ import {
   App as AntdApp,
   Button,
   Card,
+  DatePicker,
   Descriptions,
   Form,
   Input,
@@ -18,9 +19,9 @@ import {
 import type { UploadProps } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { ArrowLeftOutlined, UploadOutlined } from '@ant-design/icons';
-import { getVisit, type DiagnosisRecord, type Medication, type VisitFile } from '@/api/visits';
+import { getVisit, updateVisit, type DiagnosisRecord, type Medication, type VisitFile } from '@/api/visits';
 import {
   createRecord,
   deleteRecord,
@@ -47,6 +48,14 @@ interface MedicationFormValues {
   duration?: string;
 }
 
+interface VisitFormValues {
+  date: Dayjs;
+  hospital?: string;
+  department?: string;
+  doctor?: string;
+  note?: string;
+}
+
 export default function VisitDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -60,6 +69,25 @@ export default function VisitDetailPage() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['visit', id] });
+
+  const [visitEditOpen, setVisitEditOpen] = useState(false);
+  const [visitForm] = Form.useForm<VisitFormValues>();
+  const visitUpdateMutation = useMutation({
+    mutationFn: (values: VisitFormValues) => updateVisit(id!, {
+      date: values.date.toISOString(),
+      hospital: values.hospital?.trim() || null,
+      department: values.department?.trim() || null,
+      doctor: values.doctor?.trim() || null,
+      note: values.note?.trim() || null,
+    }),
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(['visit', id], updated);
+      await queryClient.invalidateQueries({ queryKey: ['visits'] });
+      setVisitEditOpen(false);
+      message.success('已更新就诊信息');
+    },
+    onError: (error) => message.error(extractErrorMessage(error, '更新就诊信息失败')),
+  });
 
   // Diagnosis records
   const [recordModal, setRecordModal] = useState<{ open: boolean; editing: DiagnosisRecord | null }>(
@@ -259,6 +287,18 @@ export default function VisitDetailPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           就诊详情
         </Typography.Title>
+        <Button onClick={() => {
+          visitForm.setFieldsValue({
+            date: dayjs(visit.date),
+            hospital: visit.hospital ?? '',
+            department: visit.department ?? '',
+            doctor: visit.doctor ?? '',
+            note: visit.note ?? '',
+          });
+          setVisitEditOpen(true);
+        }}>
+          编辑就诊
+        </Button>
       </Space>
 
       <Descriptions bordered size="small" column={2} style={{ marginBottom: 24 }}>
@@ -273,6 +313,42 @@ export default function VisitDetailPage() {
           {visit.note ?? '-'}
         </Descriptions.Item>
       </Descriptions>
+
+      <Modal
+        title="编辑就诊"
+        open={visitEditOpen}
+        onOk={() => visitForm.submit()}
+        onCancel={() => setVisitEditOpen(false)}
+        confirmLoading={visitUpdateMutation.isPending}
+        cancelButtonProps={{ disabled: visitUpdateMutation.isPending }}
+        closable={!visitUpdateMutation.isPending}
+        maskClosable={!visitUpdateMutation.isPending}
+        keyboard={!visitUpdateMutation.isPending}
+        forceRender
+      >
+        <Form
+          form={visitForm}
+          layout="vertical"
+          disabled={visitUpdateMutation.isPending}
+          onFinish={(values) => visitUpdateMutation.mutate(values)}
+        >
+          <Form.Item label="就诊日期" name="date" rules={[{ required: true, message: '请选择就诊日期' }]}>
+            <DatePicker showTime format="YYYY-MM-DD HH:mm" />
+          </Form.Item>
+          <Form.Item label="医院" name="hospital">
+            <Input maxLength={200} />
+          </Form.Item>
+          <Form.Item label="科室" name="department">
+            <Input maxLength={200} />
+          </Form.Item>
+          <Form.Item label="医生" name="doctor">
+            <Input maxLength={200} />
+          </Form.Item>
+          <Form.Item label="备注" name="note">
+            <Input.TextArea maxLength={1000} rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Card
         title="诊断"

@@ -35,7 +35,7 @@ describe('账号隔离 (e2e)', () => {
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL = `file:./${TEST_DB_FILE}`;
+    process.env.DATABASE_URL = `file:${TEST_DB_PATH.split('\\').join('/')}`;
     process.env.JWT_SECRET = 'test-secret-test-secret-test-secret';
     process.env.JWT_EXPIRES_IN = '1d';
     process.env.FILE_STORAGE = 'local';
@@ -261,6 +261,30 @@ describe('账号隔离 (e2e)', () => {
       .delete(`/users/${bobUserId}`)
       .set('Authorization', `Bearer ${bobToken}`)
       .expect(400);
+  });
+
+  it('更新就诊时可清空可选字段，并保留成员、诊断和用药关联', async () => {
+    const auth = `Bearer ${aliceToken}`;
+    const url = `/visits/${aliceVisitId}`;
+    await request(httpServer).patch(url).set('Authorization', auth).send({ note: '复诊备注' }).expect(200);
+    const result = await request(httpServer)
+      .patch(url)
+      .set('Authorization', auth)
+      .send({ hospital: null, note: null, doctor: ' 李医生 ' })
+      .expect(200);
+
+    expect(result.body).toMatchObject({
+      userId: aliceUserId,
+      hospital: null,
+      note: null,
+      doctor: '李医生',
+      records: [expect.objectContaining({ id: aliceRecordId })],
+      medications: [expect.objectContaining({ id: aliceMedicationId })],
+    });
+    const list = await request(httpServer).get('/visits').set('Authorization', auth).expect(200);
+    expect(list.body).toContainEqual(expect.objectContaining({
+      id: aliceVisitId, hospital: null, note: null, doctor: '李医生',
+    }));
   });
 
   it('Alice 仍可访问自己的所有数据', async () => {
