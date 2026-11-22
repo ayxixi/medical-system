@@ -16,6 +16,7 @@ coverage/
 
 # 本地数据库
 apps/server/prisma/dev.db
+apps/server/prisma/local-dev.db*
 
 # 用户上传文件（保留目录占位）
 apps/server/uploads/*
