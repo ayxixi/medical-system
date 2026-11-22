@@ -1,10 +1,12 @@
-"""Start the local development server and web app with Python 3."""
+"""Start the local app and, by default, its local OCR/speech worker."""
+import argparse
 import os
 import secrets
 import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -76,7 +78,154 @@ def stop_tree(process):
         process.wait()
 
 
+def env_file_values(path):
+    values = {}
+    if not path.exists():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def set_env_values(path, values):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    remaining = dict(values)
+    output = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in remaining:
+                output.append(f"{key}={remaining.pop(key)}")
+                continue
+        output.append(line)
+    if remaining:
+        if output and output[-1] != "":
+            output.append("")
+        output.extend(f"{key}={value}" for key, value in remaining.items())
+    path.write_text("\n".join(output) + "\n", encoding="utf-8")
+    if not WINDOWS:
+        path.chmod(0o600)
+
+
+def recognition_docker_env(key):
+    env = os.environ.copy()
+    env.update(
+        RECOGNITION_API_KEY=key,
+        RECOGNITION_WORKER_URL="http://recognition:8000",
+        RECOGNITION_WORKER_PORT="8001",
+        RECOGNITION_TIMEOUT_MS="180000",
+        RECOGNITION_MAX_FILE_SIZE_MB="10",
+        RECOGNITION_MAX_AUDIO_SECONDS="60",
+        WHISPER_MODEL="base",
+        WHISPER_DEVICE="cpu",
+        WHISPER_COMPUTE_TYPE="int8",
+        # Compose validates app-service substitutions even when starting only the worker.
+        REGISTRATION_INVITE_CODES="local-recognition-worker-only",
+    )
+    return env
+
+
+def compose_recognition(arguments, env, check=True, capture_output=False):
+    result = subprocess.run(
+        ["docker", "compose", "--profile", "recognition", *arguments],
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=capture_output,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+    return result
+
+
+def setup_recognition(config):
+    docker = shutil.which("docker")
+    if not docker:
+        raise RuntimeError(
+            "默认拍照 OCR/语音需要 Docker Desktop。请安装并启动 Docker Desktop，"
+            "或使用 `python start.py --no-recognition` 只启动核心系统。"
+        )
+    if subprocess.run(
+        [docker, "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+    ).returncode != 0:
+        raise RuntimeError(
+            "无法连接 Docker。请启动 Docker Desktop 后重试；"
+            "如暂不使用识别，可运行 `python start.py --no-recognition`。"
+        )
+
+    values = env_file_values(config)
+    key = values.get("RECOGNITION_API_KEY", "")
+    if len(key) < 32:
+        key = secrets.token_hex(32)
+    set_env_values(
+        config,
+        {
+            "RECOGNITION_WORKER_URL": "http://127.0.0.1:8001",
+            "RECOGNITION_API_KEY": key,
+        },
+    )
+    docker_env = recognition_docker_env(key)
+
+    running = compose_recognition(
+        ["ps", "--status", "running", "-q", "recognition"],
+        docker_env,
+        check=False,
+        capture_output=True,
+    )
+    already_running = running.returncode == 0 and bool(running.stdout.strip())
+    if not already_running:
+        require_port(8001)
+
+    started_here = not already_running
+    try:
+        print("正在准备本机 OCR/语音识别服务…", flush=True)
+        compose_recognition(["up", "-d", "recognition"], docker_env)
+        wait_until_ready("http://127.0.0.1:8001/health", _RunningProcess(), "本机识别服务", 200)
+
+        cached = compose_recognition(
+            ["run", "--rm", "recognition", "python", "/app/preload_models.py", "--check"],
+            docker_env,
+            check=False,
+        )
+        if cached.returncode != 0:
+            print("首次准备 RapidOCR 和 faster-whisper 模型，需要联网下载，请稍候…", flush=True)
+            compose_recognition(
+                ["run", "--rm", "recognition", "python", "/app/preload_models.py"],
+                docker_env,
+            )
+        return key, started_here
+    except Exception:
+        if started_here:
+            compose_recognition(["stop", "recognition"], docker_env, check=False)
+        raise
+
+
+class _RunningProcess:
+    """Adapt an already-running Compose service to the shared HTTP readiness waiter."""
+
+    @staticmethod
+    def poll():
+        return None
+
+
 def main():
+    parser = argparse.ArgumentParser(description="启动本地医疗记录系统及本机识别服务。")
+    parser.add_argument(
+        "--no-recognition",
+        action="store_true",
+        help="不启动 OCR/语音识别 worker（仍可使用系统其它功能）",
+    )
+    args = parser.parse_args()
+
     node = shutil.which("node")
     npm = shutil.which("npm.cmd" if WINDOWS else "npm")
     if not node or not npm:
@@ -122,7 +271,18 @@ def main():
         if WINDOWS else {"start_new_session": True}
     )
     processes = []
+    recognition_started_here = False
+    recognition_compose_env = None
     try:
+        if args.no_recognition:
+            env["RECOGNITION_WORKER_URL"] = ""
+            print("已跳过 OCR/语音识别服务。", flush=True)
+        else:
+            key, recognition_started_here = setup_recognition(config)
+            recognition_compose_env = recognition_docker_env(key)
+            env["RECOGNITION_WORKER_URL"] = "http://127.0.0.1:8001"
+            env["RECOGNITION_API_KEY"] = key
+
         backend = subprocess.Popen(
             [npm, "run", "start:dev"], cwd=SERVER, env=env, **process_options
         )
@@ -142,6 +302,8 @@ def main():
     finally:
         for process in reversed(processes):
             stop_tree(process)
+        if recognition_started_here and recognition_compose_env:
+            compose_recognition(["stop", "recognition"], recognition_compose_env, check=False)
 
 
 if __name__ == "__main__":
