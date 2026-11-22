@@ -41,6 +41,17 @@ export default function RegisterPage() {
         </Typography.Title>
         <Form layout="vertical" onFinish={onFinish} autoComplete="on">
           <Form.Item
+            label="用户名"
+            name="username"
+            rules={[
+              { required: true, message: '请设置用户名' },
+              { min: 3, max: 32, message: '用户名长度为 3 至 32 位' },
+              { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, message: '以字母或数字开头，只能包含字母、数字、点、下划线和连字符' },
+            ]}
+          >
+            <Input placeholder="用于登录，例如 litao" autoComplete="username" />
+          </Form.Item>
+          <Form.Item
             label="姓名"
             name="name"
             rules={[

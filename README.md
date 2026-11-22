@@ -132,7 +132,7 @@ npm run preview
 
 前后端都启动后，推荐按下面顺序验证页面功能：
 
-1. 打开前端地址，首次进入先注册账号
+1. 打开前端地址，首次进入先注册账号，设置用户名、邮箱与密码
 2. 登录后进入首页，检查账号信息与统计卡片是否正常显示
 3. 进入“家庭成员”页面，新增至少一个成员
 4. 进入“就诊记录”页面，新增就诊
@@ -157,8 +157,9 @@ Authorization: Bearer <accessToken>
 
 ### 认证接口
 
-- `POST /auth/register`：注册账号（邮箱 + 密码），并同时创建第一个家庭成员
-- `POST /auth/login`：登录并获取 JWT
+- `POST /auth/register`：注册账号（用户名 + 邮箱 + 密码），并同时创建第一个家庭成员
+- `POST /auth/login`：使用用户名登录并获取 JWT；升级前创建的账号可暂时使用邮箱
+- `PUT /auth/username`：为尚未设置用户名的旧账号设置用户名
 - `GET /auth/me`：获取当前账号信息
 - `POST /auth/change-password`：验证旧密码后修改密码，并撤销所有旧会话
 - `GET /export`：导出当前账号 JSON 数据（版本化；不包含密码哈希和附件原件）
@@ -298,12 +299,12 @@ http://localhost:3000
 # 1. 注册，返回 { accessToken, account, defaultUserId }
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"hunter2hunter2","name":"Alice"}'
+  -d '{"username":"alice","email":"alice@example.com","password":"hunter2hunter2","name":"Alice"}'
 
 # 2. 或后续登录
 curl -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"hunter2hunter2"}'
+  -d '{"identifier":"alice","password":"hunter2hunter2"}'
 
 # 3. 使用 token 访问受保护接口
 curl http://localhost:3000/users -H "Authorization: Bearer <accessToken>"

@@ -81,7 +81,7 @@ export default function AppLayout() {
           >
             <Space style={{ cursor: 'pointer' }}>
               <Avatar icon={<UserOutlined />} />
-              <Typography.Text>{account?.email ?? '未登录'}</Typography.Text>
+              <Typography.Text>{account?.username ?? account?.email ?? '未登录'}</Typography.Text>
             </Space>
           </Dropdown>
         </Header>

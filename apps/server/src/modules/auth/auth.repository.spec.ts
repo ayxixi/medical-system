@@ -7,6 +7,7 @@ describe('AuthRepository', () => {
     loginAttempt: { findUnique: jest.Mock; upsert: jest.Mock; deleteMany: jest.Mock };
     account: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
     };
@@ -17,6 +18,7 @@ describe('AuthRepository', () => {
       loginAttempt: { findUnique: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
       account: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -42,18 +44,20 @@ describe('AuthRepository', () => {
     prisma.account.findUnique.mockResolvedValue({
       id: 'account-1',
       email: 'alice@example.com',
+      username: 'alice',
       createdAt,
     });
 
     await expect(repository.findAccountById('account-1')).resolves.toEqual({
       id: 'account-1',
       email: 'alice@example.com',
+      username: 'alice',
       createdAt,
     });
 
     expect(prisma.account.findUnique).toHaveBeenCalledWith({
       where: { id: 'account-1' },
-      select: { id: true, email: true, createdAt: true, tokenVersion: true },
+      select: { id: true, email: true, username: true, createdAt: true, tokenVersion: true },
     });
   });
 
@@ -63,6 +67,7 @@ describe('AuthRepository', () => {
     await expect(
       repository.createAccountWithFirstUser({
         email: 'alice@example.com',
+        username: 'alice',
         passwordHash: 'hashed-password',
         name: 'Alice',
       }),
@@ -71,6 +76,7 @@ describe('AuthRepository', () => {
     expect(prisma.account.create).toHaveBeenCalledWith({
       data: {
         email: 'alice@example.com',
+        username: 'alice',
         passwordHash: 'hashed-password',
         users: {
           create: { name: 'Alice' },

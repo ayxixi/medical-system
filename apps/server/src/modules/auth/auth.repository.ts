@@ -11,10 +11,20 @@ export class AuthRepository {
     });
   }
 
+  findAccountByLoginIdentifier(identifier: string) {
+    return this.prisma.account.findFirst({
+      where: { OR: [{ username: identifier }, { email: identifier }] },
+    });
+  }
+
+  findAccountByUsername(username: string) {
+    return this.prisma.account.findUnique({ where: { username } });
+  }
+
   findAccountById(id: string) {
     return this.prisma.account.findUnique({
       where: { id },
-      select: { id: true, email: true, createdAt: true, tokenVersion: true },
+      select: { id: true, email: true, username: true, createdAt: true, tokenVersion: true },
     });
   }
 
@@ -46,14 +56,20 @@ export class AuthRepository {
     return this.prisma.account.findUnique({ where: { id } });
   }
 
+  setUsername(id: string, username: string) {
+    return this.prisma.account.update({ where: { id }, data: { username } });
+  }
+
   createAccountWithFirstUser(data: {
     email: string;
+    username: string;
     passwordHash: string;
     name: string;
   }) {
     return this.prisma.account.create({
       data: {
         email: data.email,
+        username: data.username,
         passwordHash: data.passwordHash,
         users: {
           create: { name: data.name },
