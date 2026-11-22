@@ -57,19 +57,16 @@ medical-system/
 
 ## 一键启动本地开发环境
 
-安装 Python 3、Node.js LTS 和 npm 后，在仓库根目录执行：
+安装 Python 3、Node.js LTS、npm 和 Docker Desktop（首次启用 OCR/语音需要联网下载依赖及模型）后，在仓库根目录执行：
 
 ```bash
 python start.py
 ```
 
-如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。
-缺少依赖时脚本会安装依赖，首次运行需要联网。脚本会在缺少
-`apps/server/.env` 时生成配置和随机 JWT 密钥，并初始化独立的
-`apps/server/prisma/local-dev.db`。附件保存在 `apps/server/uploads/local-dev/`。
+如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。首次运行需要联网；脚本会自动安装依赖、生成本地 JWT 和识别 worker 密钥、启动只绑定本机地址的 OCR/语音服务并准备模型。密钥保存在 `apps/server/.env`，模型保存在 Docker 命名卷，重复运行会复用。脚本还会初始化独立的 `apps/server/prisma/local-dev.db`，附件保存在 `apps/server/uploads/local-dev/`。脚本默认启用 OCR/语音；不需要识别或未安装 Docker 时，可使用 `python start.py --no-recognition` 启动其余功能。
 
 启动后打开 `http://127.0.0.1:5173/`，首次使用可在页面注册。
-后端使用本机 3000 端口，按 Ctrl+C 停止前后端。重复运行会继续使用同一份开发数据。
+后端使用本机 3000 端口，按 Ctrl+C 停止前后端及本次启动的识别服务；识别配置和 Docker 模型卷会保留。重复运行会继续使用同一份开发数据。
 
 ## 前端启动
 
