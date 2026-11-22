@@ -25,5 +25,6 @@ apps/server/uploads/*
 # Python cache
 __pycache__/
 *.py[cod]
+.start.py.lock
 apps/recognition/.venv/
 apps/recognition/models/

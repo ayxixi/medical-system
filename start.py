@@ -1,5 +1,6 @@
 """Start the local app and, by default, its local OCR/speech worker."""
 import argparse
+import atexit
 import hashlib
 import os
 import secrets
@@ -20,6 +21,33 @@ SERVER = ROOT / "apps" / "server"
 WEB = ROOT / "apps" / "web"
 WINDOWS = os.name == "nt"
 LOCAL_HTTP = build_opener(ProxyHandler({}))
+
+
+def acquire_start_lock():
+    """Prevent concurrent launcher instances from racing through port preflight."""
+    lock_path = ROOT / ".start.py.lock"
+    lock_file = lock_path.open("a+b")
+    try:
+        if WINDOWS:
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        lock_file.close()
+        raise RuntimeError(
+            "检测到另一个 start.py 实例正在运行。请先检查已打开的启动终端，再重试。"
+        ) from exc
+    atexit.register(lock_file.close)
+    return lock_file
 
 
 def require_port(port):
@@ -216,6 +244,7 @@ def main():
         help="不启动 OCR/语音识别 worker（仍可使用系统其它功能）",
     )
     args = parser.parse_args()
+    acquire_start_lock()
 
     node = shutil.which("node")
     npm = shutil.which("npm.cmd" if WINDOWS else "npm")
@@ -273,11 +302,16 @@ def main():
             env["RECOGNITION_WORKER_URL"] = "http://127.0.0.1:8001"
             env["RECOGNITION_API_KEY"] = key
 
+        # Repeat the preflight after dependency installation/model downloads. The
+        # initial check alone leaves a long window in which another app could bind.
+        require_port(3000)
+        require_port(5173)
         backend = subprocess.Popen(
             [npm, "run", "start:dev"], cwd=SERVER, env=env, **process_options
         )
         processes.append(backend)
         wait_until_ready("http://127.0.0.1:3000/auth/me", backend, "后端", 401)
+        require_port(5173)
         frontend = subprocess.Popen(
             [npm, "run", "dev", "--", "--host", "127.0.0.1", "--strictPort"],
             cwd=WEB, env=env, **process_options,
