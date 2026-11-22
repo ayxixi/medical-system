@@ -281,36 +281,43 @@ curl -X POST http://localhost:3000/auth/login \
 curl http://localhost:3000/users -H "Authorization: Bearer <accessToken>"
 ```
 
-### Docker 部署
+### Docker 生产部署
 
-在项目根目录执行：
+Docker Compose 构建单容器，容器内 Nginx 提供前端并把 `/api` 代理给 NestJS。主机只映射 8080 端口，默认绑定到 `127.0.0.1`，可接入同机 Caddy 或 Nginx 并由反向代理提供 HTTPS。SQLite 数据库和附件写入 Docker 命名卷 `medical-data`。
 
-```bash
-docker compose up --build
-```
-
-当前 `docker-compose.yml` 会：
-
-- 构建 `docker/Dockerfile`
-- 暴露宿主机 `3000` 端口到容器 `3000`
-- 挂载 `apps/server/uploads` 到容器 `/app/uploads`
-- 挂载 `apps/server/prisma` 到容器 `/app/prisma`
-- 从 `apps/server/.env` 读取环境变量
-
-容器启动命令为：
+准备 `apps/server/.env` 并设置生产密钥后，在仓库根目录运行：
 
 ```bash
-npx prisma migrate deploy && npm run start:prod
+cp deploy/.env.example deploy/.env
+# 按需调整 deploy/.env，并确保注册邀请码是独立的随机值
+docker compose --env-file deploy/.env up --build -d
+docker compose --env-file deploy/.env ps
 ```
 
-这表示容器启动时会先执行 Prisma 迁移，再以生产模式启动应用。
+首次部署到已有工作目录时，如果命名卷还没有数据库，入口脚本会从 `apps/server/prisma/dev.db` 导入一份副本，并把旧附件复制到数据卷；原数据库和附件目录以只读方式挂载，不会被改写。旧数据库副本另存于卷内 `/data/legacy-original/dev.db`。当前 `Account` 迁移会清空无法关联账户的旧记录，因此新运行库可能没有旧记录；原库副本与附件仍保留，便于后续导入工具处理。确认迁移和附件后再考虑清理源文件及快照。
+
+Compose 强制配置邀请注册码，且不直接将 HTTP 服务暴露到外网。若反向代理位于另一台机器，需显式将 `APP_BIND_ADDRESS` 设为受防火墙限制的私网地址。只有请求经过可信代理时才设置 `TRUST_PROXY=true`。
+
+健康检查会确认 Nest 和数据库均可查询。每次启动会先运行数据库迁移。备份数据库、旧库快照和本地附件：
+
+```bash
+deploy/scripts/backup.sh
+```
+
+恢复前先确认备份来源。恢复会停止服务并覆盖当前数据库与附件：
+
+```bash
+deploy/scripts/restore.sh backups/medical-backup-时间戳.tar.gz
+```
+
+备份文件和 SHA256 清单应转存到与应用主机分离且访问受控的位置。恢复脚本先校验 SHA256 并解压到暂存目录，通过文件检查后才切换数据库和附件；旧数据暂存在数据卷的 `/data/.restore-rollback`，完成验证后再按维护流程清理。服务重新启动后会检查健康状态。首次上线前应在独立环境实际演练备份与恢复。
 
 ### 生产部署注意事项
 
 - 生产环境不要使用示例中的 `JWT_SECRET`，应替换为高强度随机值
 - SQLite 适合本地或轻量部署；如果需要多实例或更高并发，建议切换到 PostgreSQL
-- 如果通过 Docker 持久化数据，务必保留 `apps/server/prisma` 和 `apps/server/uploads` 对应挂载目录
-- 如使用反向代理，请确保将外部流量转发到应用的 `3000` 端口
+- Docker 部署使用 `medical-data` 命名卷持久化 SQLite 与附件，升级镜像时保留该卷并定期演练恢复
+- 如使用同机反向代理，请确保将外部流量转发到宿主机 `8080` 端口
 
 > 2026-04-29 引入 `Account` 与 `User.accountId` 的迁移会清空旧的
 > `User`、`Visit`、`DiagnosisRecord`、`Medication`、`VisitFile` 开发数据。

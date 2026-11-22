@@ -3,12 +3,25 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    ports:
-      - "3000:3000"
     env_file:
       - ./apps/server/.env
     environment:
       NODE_ENV: production
+      BIND_HOST: 127.0.0.1
+      DATABASE_URL: file:/data/medical.db
+      UPLOAD_PATH: /data/uploads
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-invite}
+      REGISTRATION_INVITE_CODES: ${REGISTRATION_INVITE_CODES:?请通过环境变量配置邀请注册验证码}
     volumes:
-      - ./apps/server/uploads:/app/uploads
-      - ./apps/server/prisma:/app/prisma
+      - medical-data:/data
+      - ./apps/server/prisma:/legacy/prisma:ro
+      - ./apps/server/uploads:/legacy/uploads:ro
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+
+volumes:
+  medical-data:

@@ -6,3 +6,9 @@
 .github
 apps/server/prisma/dev.db
 apps/server/uploads
+apps/server/.env
+apps/server/.env.*
+apps/server/prisma/*.db
+apps/server/uploads
+backups
+deploy/.env
