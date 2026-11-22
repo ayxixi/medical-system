@@ -10,6 +10,7 @@
 - 诊断记录管理
 - 用药信息管理
 - 文件上传、替换、查询与删除
+- 可选自托管中文题图 OCR 与语音转写；结果回填诊断/备注草稿，用户确认后保存
 - 已认证业务写操作审计（不记录请求正文或附件内容）
 - 当前账号医疗记录 JSON 导出（含附件元数据，不含附件原件）
 - 前端登录 / 注册、受保护路由与业务页面（成员、就诊、诊断、用药、附件）
@@ -192,6 +193,15 @@ Authorization: Bearer <accessToken>
 - `GET /files/:id/content`：下载当前账号所属的附件原件
 - `PUT /files/:id` 以新文件替换现有附件（先写入新文件并更新 DB，再删除旧文件）
 - `DELETE /files/:id`：删除附件记录，并登记物理文件清理
+
+### 本机识别接口（可选）
+
+- `POST /recognition/ocr`：上传 JPEG/PNG/WebP，识别中文文字
+- `POST /recognition/transcribe`：上传 WebM/Ogg/WAV/MP3/M4A 等录音，中文转写
+
+两个接口要求 JWT 登录；媒体上限默认 10 MB，录音时长上限 60 秒。NestJS 将媒体转发到管理员配置的自托管 Python worker，RapidOCR 与 faster-whisper 在应用主机处理。worker 不对公网开放，Compose 中仅绑定宿主机 loopback；识别结果只填入可编辑的诊断/就诊备注表单，不会自动保存。临时录音处理后删除；系统不记录媒体或识别正文。若 worker 未启用，业务页面和手动录入仍可用。
+
+Docker Compose 默认不启动识别依赖。启用前在 `deploy/.env` 设置随机 32 字符以上的 `RECOGNITION_API_KEY`、`RECOGNITION_WORKER_URL=http://recognition:8000`，然后使用 `docker compose --env-file deploy/.env --profile recognition up --build -d`。worker 只加入应用专用 bridge，宿主机端口仅绑定到 `127.0.0.1:8001`（可通过 `RECOGNITION_WORKER_PORT` 调整），不接受公网连接。开发环境的 Nest 在宿主机运行时，可在 `apps/server/.env` 配置 `RECOGNITION_WORKER_URL=http://127.0.0.1:8001` 和相同 API key，并执行 `docker compose --env-file deploy/.env --profile recognition up -d recognition` 启动 worker。模型预下载需要出站网络；可运行 `docker compose --env-file deploy/.env --profile recognition run --rm recognition python /app/preload_models.py`，模型保存到 `recognition-models` 卷。Whisper 模型可用 `WHISPER_MODEL` 调整，下载需要额外磁盘空间。关闭识别可停止 recognition profile 并清空识别地址配置，普通应用不依赖 worker。
 
 ### 数据导出
 
