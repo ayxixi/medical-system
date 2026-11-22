@@ -11,6 +11,7 @@ model Account {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  tokenVersion Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   users        User[]
@@ -96,4 +97,11 @@ model AttachmentCleanup {
 
   @@id([storageProvider, relativePath])
   @@index([nextAttemptAt])
+}
+
+model LoginAttempt {
+  key         String @id
+  windowStart BigInt
+  count       Int
+  blockedUntil BigInt
 }

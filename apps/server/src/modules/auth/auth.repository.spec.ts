@@ -4,17 +4,21 @@ import { AuthRepository } from './auth.repository';
 describe('AuthRepository', () => {
   let repository: AuthRepository;
   let prisma: {
+    loginAttempt: { findUnique: jest.Mock; upsert: jest.Mock; deleteMany: jest.Mock };
     account: {
       findUnique: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
     };
   };
 
   beforeEach(() => {
     prisma = {
+      loginAttempt: { findUnique: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
       account: {
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -49,7 +53,7 @@ describe('AuthRepository', () => {
 
     expect(prisma.account.findUnique).toHaveBeenCalledWith({
       where: { id: 'account-1' },
-      select: { id: true, email: true, createdAt: true },
+      select: { id: true, email: true, createdAt: true, tokenVersion: true },
     });
   });
 

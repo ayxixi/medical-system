@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import type { Request } from 'express';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
 import {
   AuthenticatedAccount,
@@ -15,14 +17,22 @@ export class AuthController {
   @Public()
   @Post('register')
   register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+    return this.authService.register(registerDto, registerDto.inviteCode);
   }
 
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  login(@Body() loginDto: LoginDto, @Req() request: Request) {
+    return this.authService.login(loginDto, request.ip ?? 'unknown');
+  }
+
+  @Post('change-password')
+  changePassword(
+    @CurrentAccount() account: AuthenticatedAccount,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(account.id, dto);
   }
 
   @Get('me')

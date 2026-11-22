@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { trimString } from '../../../common/utils/string.util';
 
 export class RegisterDto {
@@ -18,4 +18,9 @@ export class RegisterDto {
   @MinLength(1)
   @MaxLength(100)
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  inviteCode?: string;
 }

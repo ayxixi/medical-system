@@ -150,6 +150,7 @@ Authorization: Bearer <accessToken>
 - `POST /auth/register`：注册账号（邮箱 + 密码），并同时创建第一个家庭成员
 - `POST /auth/login`：登录并获取 JWT
 - `GET /auth/me`：获取当前账号信息
+- `POST /auth/change-password`：验证旧密码后修改密码，并撤销所有旧会话
 
 ### 用户接口
 
@@ -188,6 +189,15 @@ Authorization: Bearer <accessToken>
 - `GET /files/:id/content`：下载当前账号所属的附件原件
 - `PUT /files/:id` 以新文件替换现有附件（先写入新文件并更新 DB，再删除旧文件）
 - `DELETE /files/:id`：删除附件记录，并登记物理文件清理
+
+### 生产认证配置
+
+生产环境默认使用邀请码注册。配置 `REGISTRATION_MODE=invite` 与服务器环境变量
+`REGISTRATION_INVITE_CODES`，多个邀请码用逗号分隔。开发环境默认开放注册。
+登录默认在 15 分钟内失败 10 次后锁定来源地址 15 分钟，可通过
+`LOGIN_MAX_ATTEMPTS`、`LOGIN_WINDOW_SECONDS` 和 `LOGIN_LOCKOUT_SECONDS` 调整。
+若部署在可信反向代理后，可设置 `TRUST_PROXY=true`，使限流按客户端 IP 生效。
+密码修改后，所有已签发的访问令牌立即失效。
 
 ## 环境变量
 

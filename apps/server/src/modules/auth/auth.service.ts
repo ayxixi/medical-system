@@ -1,11 +1,16 @@
 import {
   ConflictException,
+  ForbiddenException,
+  HttpException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import { ConfigService } from '@nestjs/config';
 import { AuthRepository } from './auth.repository';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -16,9 +21,18 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: RegisterDto, inviteCode?: string) {
+    const mode = this.configService.get<string>('REGISTRATION_MODE', 'open');
+    if (mode === 'invite') {
+      const codes = (this.configService.get<string>('REGISTRATION_INVITE_CODES', '') ?? '')
+        .split(',').map((code) => code.trim()).filter(Boolean);
+      if (!inviteCode || !codes.includes(inviteCode)) {
+        throw new ForbiddenException('邀请码无效');
+      }
+    }
     const existing = await this.authRepository.findAccountByEmail(
       registerDto.email,
     );
@@ -35,17 +49,25 @@ export class AuthService {
       name: registerDto.name,
     });
 
-    return this.buildAuthResponse(account.id, account.email, {
+    return this.buildAuthResponse(account.id, account.email, account.tokenVersion, {
       defaultUserId: account.users[0]?.id,
     });
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, clientKey: string) {
+    const key = createHash('sha256').update(clientKey || 'unknown').digest('hex');
+    const now = Date.now();
+    const existingAttempt = await this.authRepository.findLoginAttempt(key);
+    if (existingAttempt && existingAttempt.blockedUntil > BigInt(now)) {
+      throw new HttpException('登录尝试过多，请稍后再试', 429);
+    }
+
     const account = await this.authRepository.findAccountByEmail(
       loginDto.email,
     );
 
     if (!account) {
+      await this.recordFailedLogin(key, existingAttempt, now);
       throw new UnauthorizedException('邮箱或密码错误');
     }
 
@@ -55,18 +77,47 @@ export class AuthService {
     );
 
     if (!passwordValid) {
+      await this.recordFailedLogin(key, existingAttempt, now);
       throw new UnauthorizedException('邮箱或密码错误');
     }
 
-    return this.buildAuthResponse(account.id, account.email);
+    await this.authRepository.clearLoginAttempt(key);
+    return this.buildAuthResponse(account.id, account.email, account.tokenVersion);
+  }
+
+  async changePassword(accountId: string, dto: ChangePasswordDto) {
+    const account = await this.authRepository.findAccountByIdWithCredentials(accountId);
+    if (!account || !(await bcrypt.compare(dto.currentPassword, account.passwordHash))) {
+      throw new UnauthorizedException('当前密码错误');
+    }
+    await this.authRepository.changePassword(accountId, await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS));
+    return { success: true };
+  }
+
+  private async recordFailedLogin(key: string, attempt: { windowStart: bigint; count: number; blockedUntil: bigint } | null, now: number) {
+    const windowMs = this.configService.get<number>('LOGIN_WINDOW_SECONDS', 900) * 1000;
+    const lockoutMs = this.configService.get<number>('LOGIN_LOCKOUT_SECONDS', 900) * 1000;
+    const maxAttempts = this.configService.get<number>('LOGIN_MAX_ATTEMPTS', 10);
+    const inWindow = attempt && now - Number(attempt.windowStart) < windowMs;
+    const count = (inWindow ? attempt.count : 0) + 1;
+    await this.authRepository.saveLoginAttempt(key, {
+      windowStart: BigInt(inWindow ? Number(attempt.windowStart) : now),
+      count,
+      blockedUntil: BigInt(count >= maxAttempts ? now + lockoutMs : 0),
+    });
   }
 
   private buildAuthResponse(
     accountId: string,
     email: string,
+    tokenVersion = 0,
     extra: { defaultUserId?: string } = {},
   ) {
-    const accessToken = this.jwtService.sign({ sub: accountId, email });
+    const accessToken = this.jwtService.sign({
+      sub: accountId,
+      email,
+      ver: tokenVersion,
+    });
 
     return {
       accessToken,
