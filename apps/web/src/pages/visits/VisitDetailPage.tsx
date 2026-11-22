@@ -394,10 +394,10 @@ export default function VisitDetailPage() {
             <Form.Item name="note" noStyle>
               <Input.TextArea maxLength={1000} rows={3} />
             </Form.Item>
-            <RecognitionInputActions
+            {visitEditOpen && <RecognitionInputActions
               getCurrentText={() => visitForm.getFieldValue('note')}
               onText={(note) => visitForm.setFieldValue('note', note)}
-            />
+            />}
           </Form.Item>
         </Form>
       </Modal>
@@ -565,10 +565,11 @@ export default function VisitDetailPage() {
           >
             <Input.TextArea rows={4} />
           </Form.Item>
-          <RecognitionInputActions
+          {recordModal.open && <RecognitionInputActions
+            key={recordModal.editing?.id ?? "new"}
             getCurrentText={() => recordForm.getFieldValue('diagnosis')}
             onText={(diagnosis) => recordForm.setFieldValue('diagnosis', diagnosis)}
-          />
+          />}
         </Form>
       </Modal>
 
