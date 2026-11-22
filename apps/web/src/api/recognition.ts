@@ -1,12 +1,20 @@
-import { apiClient } from './client';
+import { isAxiosError } from 'axios';
+import { recognitionClient } from './client';
 
 async function postMedia(path: string, media: Blob, fileName: string): Promise<string> {
   const body = new FormData();
   body.append('file', media, fileName);
-  const { data } = await apiClient.post<{ text: string }>(`/recognition/${path}`, body, {
-    timeout: 240_000,
-  });
-  return data.text;
+  try {
+    const { data } = await recognitionClient.post<{ text: string }>(`/recognition/${path}`, body, {
+      timeout: 240_000,
+    });
+    return data.text;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 401) {
+      throw new Error('登录已失效。请先复制尚未保存的内容，再退出并重新登录。');
+    }
+    throw error;
+  }
 }
 
 export function recognizeImage(file: File): Promise<string> {

@@ -3,18 +3,20 @@ import { useAuthStore } from '@/store/auth';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
 
-export const apiClient = axios.create({
-  baseURL,
-  timeout: 15_000,
-});
+function createAuthenticatedClient() {
+  const client = axios.create({ baseURL, timeout: 15_000 });
+  client.interceptors.request.use((config) => {
+    const token = useAuthStore.getState().token;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  });
+  return client;
+}
 
-apiClient.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+export const apiClient = createAuthenticatedClient();
+
+// Media requests report expired sessions inside the editor to preserve unsaved text.
+export const recognitionClient = createAuthenticatedClient();
 
 apiClient.interceptors.response.use(
   (response) => response,
