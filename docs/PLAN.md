@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | 后端骨架 / 配置 / Prisma | ✅ 已完成 | NestJS 10 + Prisma 6 + SQLite，env 校验，全局过滤器与日志拦截器 |
 | 业务模块 MVP | ✅ 已完成 | user / visit / record / medication / file 全部 CRUD |
-| 鉴权与账号隔离 | ✅ 已完成 | JWT + bcrypt，全局 `JwtAuthGuard` + `@Public`，仓储层全部带 `accountId` 过滤 |
+| 鉴权与账号隔离 | ✅ 已完成 | JWT + bcrypt，用户名登录并兼容旧账号邮箱登录；全局 `JwtAuthGuard` + `@Public`，仓储层全部带 `accountId` 过滤 |
 | 跨账号隔离 e2e | ✅ 已完成 | `apps/server/src/account-isolation.spec.ts`，10/10 通过 |
 | README 同步 | ✅ 已完成 | 含 PATCH/DELETE 接口与前端启动说明 |
 | 前端脚手架 | ✅ 已完成 | Vite 6 + React 18 + AntD 5 + TanStack Query + zustand + axios |
@@ -24,10 +24,10 @@
 | 就诊列表聚合与过滤/排序 | ✅ 已完成 | `GET /visits` 新增 `q`、`sortBy`、`order`；前端表头可点击排序（`date` / `createdAt`）与关键字搜索框 |
 | 中文规范与文案统一 | ✅ 已完成 | instructions 固化、README 中文化、后端用户可见消息与校验提示中文化 |
 | 附件清理与重试 | 已实现 | SQLite 事务登记删除和替换，后台清理并重试。S3 / MinIO 待联调 |
-| 单元测试补齐 | 🟡 已开始 | service / repository 已覆盖 auth、user、visit、record、medication、file；另覆盖附件清理队列。存储服务、控制器和异常/边界分支仍可继续补齐 |
+| 单元测试补齐 | 🟡 进行中 | service / repository 已覆盖主要业务模块；新增存储服务、识别代理、审计/导出、校验/异常与日志边界测试（Issue #54）。业务控制器及剩余异常/边界分支仍可继续补齐 |
 | Phase 3：Postgres + S3 | 🟡 已部分完成 | `S3StorageService` 已实现，仍需切换 datasource 并完成 Postgres / MinIO 实测 |
 | Phase 4：审计日志 / 账号数据导出 | 🟡 部分完成 | 操作审计与按账号 JSON 导出已实现；仍需评估 ZIP 附件打包和导入恢复流程。Docker 数据卷备份/恢复已单独实现 |
-| Phase 5：本机 OCR 与语音录入 | 🟡 已实现首版，待评审 | 可选自托管 Python worker、RapidOCR/faster-whisper API 与诊断/备注草稿回填已实现；模型预热和目标环境体验待验证 |
+| Phase 5：本机 OCR 与语音录入 | 🟡 首版已合并，待目标环境验收 | 拍照/选图、语音转写、可编辑预览及追加/替换已实现；模型预热、低质量媒体与目标设备体验待验证 |
 | 历史孤儿附件盘点 | ⬜ 待处理 | 附件清理队列已覆盖后续删除/替换，尚未盘点旧数据遗留的孤儿文件 |
 
 ## 二、近期完成清单
@@ -47,11 +47,13 @@
 - [x] 家庭成员和附件清理关键路径测试（`UserService`、`UserRepository`、`AttachmentCleanupService`，覆盖账号过滤、最后成员保护、并发清理、引用保护与重试）
 - [x] 路由级懒加载：登录、注册、首页、成员、就诊列表、详情和 AppLayout 按路由动态加载；初始入口 gzip 约减少 64%
 - [x] 生产容器部署、健康检查、持久化卷与备份/恢复脚本（镜像构建及容器健康检查待实测）
+- [x] 识别结果可编辑预览，明确选择追加/替换并预览1000字限制（PR #52）
+- [x] 用户名登录，旧账号保留邮箱登录并可设置用户名（PR #52；用户确认邮箱登录正常）
 
 ## 三、下一步候选（按优先级）
 
 1. **剩余单元测试**
-   - 补充存储服务、控制器和未覆盖的异常/边界分支，重点维持账号过滤和对象存储失败恢复行为
+   - Issue #54 覆盖存储提供方、识别、审计/导出和通用边界；后续补业务控制器与剩余异常分支，重点维持账号过滤和对象存储失败恢复行为
 2. **生产容器端到端验证**
    - 在 npm registry 可用的环境构建镜像，启动 Compose，检查迁移、健康检查、附件读写及备份恢复
 3. **Phase 3：PostgreSQL + S3 验证**
@@ -68,6 +70,7 @@
    - ✅ Compose 增加可选 recognition profile、专用 bridge 网络、仅绑定到宿主机 loopback 的端口和独立模型卷；默认不拉起识别服务，普通手动录入不受影响
    - ✅ 本地 `start.py` 默认创建 Python 虚拟环境、安装识别依赖、准备模型并启动 worker；开发环境不需要 Docker，可用 `--no-recognition` 跳过
    - 后续需在目标部署环境验证 CPU/内存、离线可用性、低质量媒体、超时与麦克风/相机权限
+- 后续计划：增加本机病历摘要；目前仅纳入计划，尚未实现。
 6. **历史孤儿附件盘点**
    - 在备份后对照数据库附件引用和本地/S3 对象，生成只读清单，再决定是否清理
 
@@ -99,3 +102,4 @@
 - 2026-11-22：按路由使用 `React.lazy` 拆分页面。Vite 初始入口从 1,343.76 KB（gzip 426.78 KB）降至 470.02 KB（gzip 153.99 KB），首屏业务页面仅在进入相应路由后下载。
 - 2026-11-22：题图 OCR 与语音转写作为 Phase 5 规划扩展；优先采用自托管 Python worker，不调用第三方识别 API，但先确认“本机”所指的计算设备和医疗文本落点。
 - 2026-11-22：Phase 5 本机开发默认通过 Python 虚拟环境运行识别 worker，生产部署仍可选择 Compose；worker 仅绑定 loopback，要求共享随机 API key，模型数据单独持久化，不把用户媒体和识别文本写入数据库或日志。
+- 2026-11-22：PR #52 合并识别结果预览与用户名登录。摘要功能明确延期，后续另行立项。
