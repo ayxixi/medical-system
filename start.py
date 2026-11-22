@@ -50,14 +50,14 @@ def acquire_start_lock():
     return lock_file
 
 
-def require_port(port):
+def require_port(port, host="127.0.0.1"):
     with socket.socket() as sock:
         if WINDOWS:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         else:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            sock.bind(("127.0.0.1", port))
+            sock.bind((host, port))
         except OSError as exc:
             command = (
                 f"请先检查占用进程：`netstat -ano | findstr :{port}`，"
@@ -257,7 +257,9 @@ def main():
         help="不启动 OCR/语音识别 worker（仍可使用系统其它功能）",
     )
     parser.add_argument("--backend-port", type=int, default=3000, help="后端监听端口")
+    parser.add_argument("--lan", action="store_true", help="允许局域网设备访问前端")
     args = parser.parse_args()
+    web_host = "0.0.0.0" if args.lan else "127.0.0.1"
     backend_port = args.backend_port
     if not 1 <= backend_port <= 65535 or backend_port == 5173 or (
         backend_port == 8001 and not args.no_recognition
@@ -277,8 +279,8 @@ def main():
     npm = shutil.which("npm.cmd" if WINDOWS else "npm")
     if not node or not npm:
         raise RuntimeError("请先安装受支持的 Node.js LTS 和 npm。")
-    for port in (backend_port, 5173):
-        require_port(port)
+    require_port(backend_port)
+    require_port(5173, web_host)
 
     config = SERVER / ".env"
     if not config.exists():
@@ -335,21 +337,23 @@ def main():
         # Repeat the preflight after dependency installation/model downloads. The
         # initial check alone leaves a long window in which another app could bind.
         require_port(backend_port)
-        require_port(5173)
+        require_port(5173, web_host)
         backend = subprocess.Popen(
             [node, "--enable-source-maps", str(SERVER / "dist" / "main")], cwd=SERVER, env=env, **process_options
         )
         processes.append(backend)
         wait_until_ready(f"{backend_url}/auth/me", backend, "后端", 401)
-        require_port(5173)
+        require_port(5173, web_host)
         frontend = subprocess.Popen(
-            [npm, "run", "dev", "--", "--host", "127.0.0.1", "--strictPort"],
+            [npm, "run", "dev", "--", "--host", web_host, "--strictPort"],
             cwd=WEB, env=env, **process_options,
         )
         processes.append(frontend)
         wait_until_ready("http://127.0.0.1:5173/", frontend, "前端", 200)
         wait_until_ready("http://127.0.0.1:5173/api/auth/me", frontend, "前端 API 代理", 401)
         print("开发环境已启动：http://127.0.0.1:5173/ · Ctrl+C 停止", flush=True)
+        if args.lan:
+            print("手机请访问 Vite 输出的 Network 地址，选择电脑 Wi-Fi 或有线网卡的 IPv4。", flush=True)
         while all(process.poll() is None for process in processes):
             time.sleep(0.25)
         raise RuntimeError("开发服务提前退出，请检查上面的日志。")
