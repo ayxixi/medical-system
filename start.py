@@ -8,13 +8,14 @@ import subprocess
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
 
 
 ROOT = Path(__file__).resolve().parent
 SERVER = ROOT / "apps" / "server"
 WEB = ROOT / "apps" / "web"
 WINDOWS = os.name == "nt"
+LOCAL_HTTP = build_opener(ProxyHandler({}))
 
 
 def require_port(port):
@@ -29,21 +30,26 @@ def require_port(port):
 
 def wait_until_ready(url, process, label, expected_status):
     deadline = time.monotonic() + 60
+    last_result = "尚未收到响应"
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError(f"{label}提前退出，退出码 {process.returncode}。")
         try:
-            with urlopen(url, timeout=1) as response:
+            with LOCAL_HTTP.open(url, timeout=1) as response:
+                last_result = f"HTTP {response.status}"
                 if response.status == expected_status:
                     return
         except HTTPError as exc:
             exc.close()
+            last_result = f"HTTP {exc.code}"
             if exc.code == expected_status:
                 return
-        except (URLError, TimeoutError):
-            pass
+        except (URLError, TimeoutError) as exc:
+            last_result = str(exc)
         time.sleep(0.25)
-    raise RuntimeError(f"{label}启动超时，请检查上面的日志。")
+    raise RuntimeError(
+        f"{label}启动超时。探测 {url} 预期 HTTP {expected_status}，最近结果：{last_result}"
+    )
 
 
 def stop_tree(process):
