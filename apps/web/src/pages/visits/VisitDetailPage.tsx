@@ -328,7 +328,7 @@ export default function VisitDetailPage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
+      <Space wrap style={{ marginBottom: 16 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/visits')}>
           返回
         </Button>
@@ -349,7 +349,7 @@ export default function VisitDetailPage() {
         </Button>
       </Space>
 
-      <Descriptions bordered size="small" column={2} style={{ marginBottom: 24 }}>
+      <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 24 }}>
         <Descriptions.Item label="成员">{visit.user?.name ?? '-'}</Descriptions.Item>
         <Descriptions.Item label="就诊日期">
           {dayjs(visit.date).format('YYYY-MM-DD HH:mm')}
@@ -357,7 +357,7 @@ export default function VisitDetailPage() {
         <Descriptions.Item label="医院">{visit.hospital ?? '-'}</Descriptions.Item>
         <Descriptions.Item label="科室">{visit.department ?? '-'}</Descriptions.Item>
         <Descriptions.Item label="医生">{visit.doctor ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="备注" span={2}>
+        <Descriptions.Item label="备注">
           {visit.note ?? '-'}
         </Descriptions.Item>
       </Descriptions>

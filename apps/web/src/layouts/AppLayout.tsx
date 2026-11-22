@@ -1,4 +1,4 @@
-import { Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd';
+import { Grid, Layout, Menu, Dropdown, Avatar, Space, Typography } from 'antd';
 import {
   UserOutlined,
   LogoutOutlined,
@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/auth';
 const { Header, Sider, Content } = Layout;
 
 export default function AppLayout() {
+  const mobile = Grid.useBreakpoint().lg === false;
   const navigate = useNavigate();
   const location = useLocation();
   const account = useAuthStore((state) => state.account);
@@ -36,7 +37,7 @@ export default function AppLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0" theme="dark">
+      {!mobile && <Sider theme="dark">
         <div
           style={{
             color: '#fff',
@@ -55,12 +56,12 @@ export default function AppLayout() {
           items={menuItems}
           onClick={({ key }) => navigate(key)}
         />
-      </Sider>
-      <Layout>
+      </Sider>}
+      <Layout style={{ minWidth: 0 }}>
         <Header
           style={{
             background: '#fff',
-            padding: '0 24px',
+            padding: mobile ? '0 12px' : '0 24px',
             display: 'flex',
             justifyContent: 'flex-end',
             alignItems: 'center',
@@ -84,8 +85,14 @@ export default function AppLayout() {
             </Space>
           </Dropdown>
         </Header>
-        <Content style={{ margin: 24 }}>
-          <div style={{ background: '#fff', padding: 24, minHeight: 360, borderRadius: 8 }}>
+        {mobile && (
+          <nav aria-label="主导航">
+            <Menu mode="horizontal" selectedKeys={[selectedKey]} items={menuItems}
+              onClick={({ key }) => navigate(key)} style={{ justifyContent: 'center' }} />
+          </nav>
+        )}
+        <Content style={{ margin: mobile ? 8 : 24, minWidth: 0 }}>
+          <div style={{ background: '#fff', padding: mobile ? 12 : 24, minHeight: 360, borderRadius: 8 }}>
             <Outlet />
           </div>
         </Content>
