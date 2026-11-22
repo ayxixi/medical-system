@@ -16,6 +16,7 @@
 | README 同步 | ✅ 已完成 | 含 PATCH/DELETE 接口与前端启动说明 |
 | 前端脚手架 | ✅ 已完成 | Vite 6 + React 18 + AntD 5 + TanStack Query + zustand + axios |
 | 登录 / 注册 / 路由守卫 | ✅ 已完成 | `/login`、`/register`、`RequireAuth` |
+| 路由级懒加载 | ✅ 已完成 | 页面与 AppLayout 使用 `React.lazy`；入口 JS 从 1,343.76 KB 降至 470.02 KB（gzip 426.78 KB 降至 153.99 KB） |
 | 业务页面 | ✅ 已完成 | 家庭成员、就诊列表（筛选+分页）、就诊详情（诊断/用药/附件 CRUD + 上传） |
 | 文件模块存储增强 | ✅ 已完成 | `DELETE /files/:id`、本地文件物理删除、`S3StorageService` 真实上传/删除实现 |
 | 文件替换流程 | ✅ 已完成 | `PUT /files/:id`，附件行 “替换” 按钮，先写入新文件再删除旧文件避免数据丢失 |
@@ -41,17 +42,16 @@
 - [x] 中文规范 instructions 与 README / 后端用户可见文本中文化
 - [x] 单元测试补齐（已覆盖 `AuthService`、`VisitService`、`RecordService`、`MedicationService`、`FileService` 与 `AuthRepository`、`VisitRepository`、`RecordRepository`、`MedicationRepository`、`FileRepository`）
 - [x] 家庭成员和附件清理关键路径测试（`UserService`、`UserRepository`、`AttachmentCleanupService`，覆盖账号过滤、最后成员保护、并发清理、引用保护与重试）
+- [x] 路由级懒加载：登录、注册、首页、成员、就诊列表、详情和 AppLayout 按路由动态加载；初始入口 gzip 约减少 64%
 
 ## 三、下一步候选（按优先级）
 
 1. **剩余单元测试**
    - 补充存储服务、控制器和未覆盖的异常/边界分支，重点维持账号过滤和对象存储失败恢复行为
-2. **路由级 lazy import**
-   - 当前 `dist` 主包 1.3MB，按路由拆包到 < 500KB
-3. **Phase 3：PostgreSQL + S3 验证**
+2. **Phase 3：PostgreSQL + S3 验证**
    - docker-compose 启 Postgres，切换 `DATABASE_URL`
    - 设置 `STORAGE_DRIVER=s3`，配 MinIO 验证 `S3StorageService`
-4. **Phase 4：审计日志 / 备份导出**
+3. **Phase 4：审计日志 / 备份导出**
    - 新增 `AuditLog` 表与拦截器
    - 提供 `GET /export` 按账号导出 JSON
 
@@ -69,3 +69,4 @@
 - 2026-04-30：文件替换采用“先写入新文件 + 更新 DB 后再删除旧文件”的顺序，避免中间状态导致附件丢失；旧文件删除失败不阻断业务，仅产生孤儿文件（待后续清理作业）。
 
 - 2026-11-22：通过 SQLite 触发器持久化附件清理任务，覆盖级联删除和替换。历史遗留孤儿文件需单独盘点。
+- 2026-11-22：按路由使用 `React.lazy` 拆分页面。Vite 初始入口从 1,343.76 KB（gzip 426.78 KB）降至 470.02 KB（gzip 153.99 KB），首屏业务页面仅在进入相应路由后下载。
