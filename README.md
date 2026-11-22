@@ -52,6 +52,22 @@ medical-system/
   docker-compose.yml
 ```
 
+## 一键启动本地开发环境
+
+安装 Python 3、Node.js LTS 和 npm 后，在仓库根目录执行：
+
+```bash
+python start.py
+```
+
+如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。
+缺少依赖时脚本会安装依赖，首次运行需要联网。脚本会在缺少
+`apps/server/.env` 时生成配置和随机 JWT 密钥，并初始化独立的
+`apps/server/prisma/local-dev.db`。附件保存在 `apps/server/uploads/local-dev/`。
+
+启动后打开 `http://127.0.0.1:5173/`，首次使用可在页面注册。
+后端使用本机 3000 端口，按 Ctrl+C 停止前后端。重复运行会继续使用同一份开发数据。
+
 ## 前端启动
 
 前端工程位于 `apps/web/`。首次启动：
