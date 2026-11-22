@@ -1,0 +1,52 @@
+name: AI delivery
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  stage-artifacts:
+    name: Stage artifacts
+    runs-on: ubuntu-latest
+    env:
+      HAS_WORKFLOW_READ_TOKEN: ${{ secrets.AI_WORKFLOW_READ_TOKEN != '' }}
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read the pinned submodule commit
+        id: workflow
+        run: |
+          commit="$(git rev-parse HEAD:.ai-workflow)"
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+      - name: Check out shared workflow
+        if: env.HAS_WORKFLOW_READ_TOKEN == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ayxixi/ai-dev-workflow
+          ref: ${{ steps.workflow.outputs.commit }}
+          token: ${{ secrets.AI_WORKFLOW_READ_TOKEN }}
+          path: .ai-workflow
+          persist-credentials: false
+      - name: Validate stage artifacts
+        env:
+          WORKFLOW_COMMIT: ${{ steps.workflow.outputs.commit }}
+        run: |
+          if [[ "$HAS_WORKFLOW_READ_TOKEN" == 'true' ]]; then
+            python3 .ai-workflow/scripts/check_pr_delivery.py --project-root .
+          else
+            snapshot=.github/ai-workflow-snapshot.sha256
+            read -r snapshot_commit < "$snapshot"
+            if [[ "$snapshot_commit" != "$WORKFLOW_COMMIT" ]]; then
+              echo "CI snapshot is out of date. Run .ai-workflow/scripts/sync_ci_snapshot.py."
+              exit 1
+            fi
+            tail -n +2 "$snapshot" | sha256sum --check -
+            python3 scripts/check_pr_delivery.py --project-root .
+          fi
