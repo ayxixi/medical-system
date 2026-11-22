@@ -66,7 +66,7 @@
    - ✅ 首版提供拍照/选图与浏览器录音控件，通过 NestJS JWT API 调用内网可选 Python worker；不调用云端 OCR/ASR API
    - ✅ 上传限制默认 10 MB、录音最长 60 秒、代理超时可配置；worker 校验图像像素、音频格式/时长，转写临时文件处理后清理
    - ✅ Compose 增加可选 recognition profile、专用 bridge 网络、仅绑定到宿主机 loopback 的端口和独立模型卷；默认不拉起识别服务，普通手动录入不受影响
-   - ✅ 本地 `start.py` 默认自动生成识别密钥、启动 worker 并在首次运行时准备模型；可用 `--no-recognition` 跳过
+   - ✅ 本地 `start.py` 默认创建 Python 虚拟环境、安装识别依赖、准备模型并启动 worker；开发环境不需要 Docker，可用 `--no-recognition` 跳过
    - 后续需在目标部署环境验证 CPU/内存、离线可用性、低质量媒体、超时与麦克风/相机权限
 6. **历史孤儿附件盘点**
    - 在备份后对照数据库附件引用和本地/S3 对象，生成只读清单，再决定是否清理
@@ -98,4 +98,4 @@
 - 2026-11-22：通过 SQLite 触发器持久化附件清理任务，覆盖级联删除和替换。历史遗留孤儿文件需单独盘点。
 - 2026-11-22：按路由使用 `React.lazy` 拆分页面。Vite 初始入口从 1,343.76 KB（gzip 426.78 KB）降至 470.02 KB（gzip 153.99 KB），首屏业务页面仅在进入相应路由后下载。
 - 2026-11-22：题图 OCR 与语音转写作为 Phase 5 规划扩展；优先采用自托管 Python worker，不调用第三方识别 API，但先确认“本机”所指的计算设备和医疗文本落点。
-- 2026-11-22：Phase 5 首版采用 Compose 可选 Python worker；worker 处于专用 Docker bridge，宿主机端口仅绑定 loopback，要求共享随机 API key，模型数据单独持久化，不把用户媒体和识别文本写入数据库或日志。
+- 2026-11-22：Phase 5 本机开发默认通过 Python 虚拟环境运行识别 worker，生产部署仍可选择 Compose；worker 仅绑定 loopback，要求共享随机 API key，模型数据单独持久化，不把用户媒体和识别文本写入数据库或日志。

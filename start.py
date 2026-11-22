@@ -1,5 +1,6 @@
 """Start the local app and, by default, its local OCR/speech worker."""
 import argparse
+import hashlib
 import os
 import secrets
 import shutil
@@ -8,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+import venv
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, build_opener
@@ -27,7 +29,13 @@ def require_port(port):
         try:
             sock.bind(("127.0.0.1", port))
         except OSError as exc:
-            raise RuntimeError(f"端口 {port} 不可用，请关闭占用该端口的程序。") from exc
+            command = (
+                f"请先检查占用进程：`netstat -ano | findstr :{port}`，"
+                "确认进程用途后再关闭它，或停止另一个正在运行的开发服务。"
+                if WINDOWS
+                else f"请检查占用进程（`lsof -i :{port}`），确认后停止它或停止另一个开发服务。"
+            )
+            raise RuntimeError(f"端口 {port} 已被占用。{command}") from exc
 
 
 def wait_until_ready(url, process, label, expected_status):
@@ -115,52 +123,30 @@ def set_env_values(path, values):
         path.chmod(0o600)
 
 
-def recognition_docker_env(key):
-    env = os.environ.copy()
-    env.update(
-        RECOGNITION_API_KEY=key,
-        RECOGNITION_WORKER_URL="http://recognition:8000",
-        RECOGNITION_WORKER_PORT="8001",
-        RECOGNITION_TIMEOUT_MS="180000",
-        RECOGNITION_MAX_FILE_SIZE_MB="10",
-        RECOGNITION_MAX_AUDIO_SECONDS="60",
-        WHISPER_MODEL="base",
-        WHISPER_DEVICE="cpu",
-        WHISPER_COMPUTE_TYPE="int8",
-        # Compose validates app-service substitutions even when starting only the worker.
-        REGISTRATION_INVITE_CODES="local-recognition-worker-only",
-    )
-    return env
+def prepare_recognition(config):
+    if sys.version_info < (3, 11) or sys.version_info >= (3, 13):
+        raise RuntimeError("本机 OCR/语音需要 Python 3.11 或 3.12。")
+    recognition = ROOT / "apps" / "recognition"
+    environment = recognition / ".venv"
+    executable = environment / ("Scripts/python.exe" if WINDOWS else "bin/python")
+    if not executable.is_file():
+        print("正在创建 OCR/语音识别的 Python 虚拟环境…", flush=True)
+        venv.EnvBuilder(with_pip=True).create(environment)
 
-
-def compose_recognition(arguments, env, check=True, capture_output=False):
-    result = subprocess.run(
-        ["docker", "compose", "--profile", "recognition", *arguments],
-        cwd=ROOT,
-        env=env,
-        check=False,
-        capture_output=capture_output,
-        text=True,
-    )
-    if check and result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, result.args)
-    return result
-
-
-def setup_recognition(config):
-    docker = shutil.which("docker")
-    if not docker:
-        raise RuntimeError(
-            "默认拍照 OCR/语音需要 Docker Desktop。请安装并启动 Docker Desktop，"
-            "或使用 `python start.py --no-recognition` 只启动核心系统。"
+    requirements = recognition / "requirements.txt"
+    stamp = environment / ".medical-recognition-dependencies"
+    dependency_hash = hashlib.sha256(requirements.read_bytes()).hexdigest()
+    if not stamp.is_file() or stamp.read_text(encoding="utf-8") != dependency_hash:
+        print("正在本机安装 OCR/语音识别依赖…", flush=True)
+        pip_env = os.environ.copy()
+        pip_env.setdefault("PIP_DEFAULT_TIMEOUT", "60")
+        subprocess.run(
+            [str(executable), "-m", "pip", "install", "-r", str(requirements)],
+            cwd=recognition,
+            env=pip_env,
+            check=True,
         )
-    if subprocess.run(
-        [docker, "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
-    ).returncode != 0:
-        raise RuntimeError(
-            "无法连接 Docker。请启动 Docker Desktop 后重试；"
-            "如暂不使用识别，可运行 `python start.py --no-recognition`。"
-        )
+        stamp.write_text(dependency_hash, encoding="utf-8")
 
     values = env_file_values(config)
     key = values.get("RECOGNITION_API_KEY", "")
@@ -173,48 +159,53 @@ def setup_recognition(config):
             "RECOGNITION_API_KEY": key,
         },
     )
-    docker_env = recognition_docker_env(key)
-
-    running = compose_recognition(
-        ["ps", "--status", "running", "-q", "recognition"],
-        docker_env,
-        check=False,
-        capture_output=True,
+    worker_env = os.environ.copy()
+    worker_env.update(
+        RECOGNITION_API_KEY=key,
+        RECOGNITION_MODEL_DIR=str(recognition / "models"),
+        MAX_MEDIA_SIZE_MB="10",
+        MAX_AUDIO_SECONDS="60",
+        WHISPER_MODEL="base",
+        WHISPER_DEVICE="cpu",
+        WHISPER_COMPUTE_TYPE="int8",
     )
-    already_running = running.returncode == 0 and bool(running.stdout.strip())
-    if not already_running:
-        require_port(8001)
+    model_dir = Path(worker_env["RECOGNITION_MODEL_DIR"])
+    model_dir.mkdir(parents=True, exist_ok=True)
+    worker_env["HF_HOME"] = str(model_dir / "huggingface")
+    worker_env["RECOGNITION_WORKER_URL"] = "http://127.0.0.1:8001"
 
-    started_here = not already_running
+    require_port(8001)
+    preload_command = [str(executable), "preload_models.py"]
+    cached = subprocess.run(
+        [*preload_command, "--check"],
+        cwd=recognition,
+        env=worker_env,
+        check=False,
+    )
+    if cached.returncode != 0:
+        print("首次运行将下载 RapidOCR 和 Whisper base 模型，需要联网，请稍候…", flush=True)
+        subprocess.run(preload_command, cwd=recognition, env=worker_env, check=True)
+    print("正在启动本机 OCR/语音识别服务…", flush=True)
+    worker = subprocess.Popen(
+        [
+            str(executable), "-m", "uvicorn", "worker:app",
+            "--host", "127.0.0.1", "--port", "8001",
+            "--no-access-log", "--log-level", "warning",
+        ],
+        cwd=recognition,
+        env=worker_env,
+        **(
+            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+            if WINDOWS
+            else {"start_new_session": True}
+        ),
+    )
     try:
-        print("正在准备本机 OCR/语音识别服务…", flush=True)
-        compose_recognition(["up", "-d", "recognition"], docker_env)
-        wait_until_ready("http://127.0.0.1:8001/health", _RunningProcess(), "本机识别服务", 200)
-
-        cached = compose_recognition(
-            ["run", "--rm", "recognition", "python", "/app/preload_models.py", "--check"],
-            docker_env,
-            check=False,
-        )
-        if cached.returncode != 0:
-            print("首次准备 RapidOCR 和 faster-whisper 模型，需要联网下载，请稍候…", flush=True)
-            compose_recognition(
-                ["run", "--rm", "recognition", "python", "/app/preload_models.py"],
-                docker_env,
-            )
-        return key, started_here
+        wait_until_ready("http://127.0.0.1:8001/health", worker, "本机识别服务", 200)
     except Exception:
-        if started_here:
-            compose_recognition(["stop", "recognition"], docker_env, check=False)
+        stop_tree(worker)
         raise
-
-
-class _RunningProcess:
-    """Adapt an already-running Compose service to the shared HTTP readiness waiter."""
-
-    @staticmethod
-    def poll():
-        return None
+    return key, worker
 
 
 def main():
@@ -271,15 +262,14 @@ def main():
         if WINDOWS else {"start_new_session": True}
     )
     processes = []
-    recognition_started_here = False
-    recognition_compose_env = None
+    recognition_process = None
     try:
         if args.no_recognition:
             env["RECOGNITION_WORKER_URL"] = ""
             print("已跳过 OCR/语音识别服务。", flush=True)
         else:
-            key, recognition_started_here = setup_recognition(config)
-            recognition_compose_env = recognition_docker_env(key)
+            key, recognition_process = prepare_recognition(config)
+            processes.append(recognition_process)
             env["RECOGNITION_WORKER_URL"] = "http://127.0.0.1:8001"
             env["RECOGNITION_API_KEY"] = key
 
@@ -302,8 +292,6 @@ def main():
     finally:
         for process in reversed(processes):
             stop_tree(process)
-        if recognition_started_here and recognition_compose_env:
-            compose_recognition(["stop", "recognition"], recognition_compose_env, check=False)
 
 
 if __name__ == "__main__":

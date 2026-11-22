@@ -4,7 +4,6 @@ import base64
 import binascii
 import hmac
 import os
-import subprocess
 import tempfile
 import threading
 from functools import lru_cache
@@ -19,6 +18,7 @@ from pydantic import BaseModel, Field
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 MODEL_LOCK = threading.Lock()
 API_KEY = os.environ.get("RECOGNITION_API_KEY", "")
+MODEL_DIR = Path(os.environ.get("RECOGNITION_MODEL_DIR", "/models"))
 MAX_BYTES = int(os.environ.get("MAX_MEDIA_SIZE_MB", "10")) * 1024 * 1024
 MAX_AUDIO_SECONDS = int(os.environ.get("MAX_AUDIO_SECONDS", "60"))
 ALLOWED_TYPES = {
@@ -70,7 +70,7 @@ def get_whisper_model():
         os.environ.get("WHISPER_MODEL", "base"),
         device=os.environ.get("WHISPER_DEVICE", "cpu"),
         compute_type=os.environ.get("WHISPER_COMPUTE_TYPE", "int8"),
-        download_root="/models/whisper",
+        download_root=str(MODEL_DIR / "whisper"),
     )
 
 
@@ -110,15 +110,13 @@ def ocr(payload: MediaRequest, x_recognition_key: str | None = Header(default=No
 
 def audio_duration(file_path: str) -> float:
     try:
-        result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path],
-            capture_output=True,
-            check=True,
-            timeout=8,
-            text=True,
-        )
-        return float(result.stdout.strip())
-    except (subprocess.SubprocessError, ValueError, OSError):
+        import av
+
+        with av.open(file_path) as media:
+            if media.duration is None:
+                raise ValueError("Audio duration is missing")
+            return media.duration / av.time_base
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid audio") from None
 
 
