@@ -5,10 +5,6 @@ import re
 import sys
 from pathlib import Path
 
-from rapidocr_onnxruntime import RapidOCR
-from faster_whisper import WhisperModel
-
-
 if __name__ == "__main__":
     model_name = os.environ.get("WHISPER_MODEL", "base")
     safe_model_name = re.sub(r"[^A-Za-z0-9._-]", "_", model_name)
@@ -17,6 +13,9 @@ if __name__ == "__main__":
     ready_marker = model_dir / f".recognition-ready-{safe_model_name}"
     if "--check" in sys.argv:
         raise SystemExit(0 if ready_marker.is_file() else 1)
+
+    from rapidocr_onnxruntime import RapidOCR
+    from faster_whisper import WhisperModel
 
     RapidOCR()
     WhisperModel(
