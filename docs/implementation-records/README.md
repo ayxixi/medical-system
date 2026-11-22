@@ -30,3 +30,4 @@
 ## 当前已有记录
 
 - [../session-implementation-record-2026-04-30.md](../session-implementation-record-2026-04-30.md)
+- [Issue #56：文档同步与 Docker Compose 部署手册](./issue-56/README.md)
