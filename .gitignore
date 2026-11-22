@@ -25,3 +25,5 @@ apps/server/uploads/*
 # Python cache
 __pycache__/
 *.py[cod]
+apps/recognition/.venv/
+apps/recognition/models/

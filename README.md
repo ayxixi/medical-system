@@ -57,16 +57,16 @@ medical-system/
 
 ## 一键启动本地开发环境
 
-安装 Python 3、Node.js LTS、npm 和 Docker Desktop（首次启用 OCR/语音需要联网下载依赖及模型）后，在仓库根目录执行：
+安装 Python 3.11/3.12、Node.js LTS 和 npm 后，在仓库根目录执行（首次运行需要联网安装依赖和模型）：
 
 ```bash
 python start.py
 ```
 
-如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。首次运行需要联网；脚本会自动安装依赖、生成本地 JWT 和识别 worker 密钥、启动只绑定本机地址的 OCR/语音服务并准备模型。密钥保存在 `apps/server/.env`，模型保存在 Docker 命名卷，重复运行会复用。脚本还会初始化独立的 `apps/server/prisma/local-dev.db`，附件保存在 `apps/server/uploads/local-dev/`。脚本默认启用 OCR/语音；不需要识别或未安装 Docker 时，可使用 `python start.py --no-recognition` 启动其余功能。
+如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。启动脚本会在 `apps/recognition/.venv` 创建隔离的 Python 环境并安装识别依赖；OCR/Whisper 模型保存在 `apps/recognition/models`，重复运行会复用。脚本自动生成本地 JWT 和识别 worker 密钥，密钥保存在 `apps/server/.env`，并启动只绑定本机地址的识别服务。脚本还会初始化独立的 `apps/server/prisma/local-dev.db`，附件保存在 `apps/server/uploads/local-dev/`。开发环境默认启用 OCR/语音，不需要 Docker；如暂时不需要识别，可用 `python start.py --no-recognition`。
 
 启动后打开 `http://127.0.0.1:5173/`，首次使用可在页面注册。
-后端使用本机 3000 端口，按 Ctrl+C 停止前后端及本次启动的识别服务；识别配置和 Docker 模型卷会保留。重复运行会继续使用同一份开发数据。
+后端使用本机 3000 端口，按 Ctrl+C 停止前后端及本次启动的识别服务；本地识别环境、配置和模型缓存会保留。若 3000、5173 或 8001 已被占用，脚本会提示检查占用进程，不会自动结束其他程序。重复运行会继续使用同一份开发数据。
 
 ## 前端启动
 
@@ -198,7 +198,7 @@ Authorization: Bearer <accessToken>
 
 两个接口要求 JWT 登录；媒体上限默认 10 MB，录音时长上限 60 秒。NestJS 将媒体转发到管理员配置的自托管 Python worker，RapidOCR 与 faster-whisper 在应用主机处理。worker 不对公网开放，Compose 中仅绑定宿主机 loopback；识别结果只填入可编辑的诊断/就诊备注表单，不会自动保存。临时录音处理后删除；系统不记录媒体或识别正文。若 worker 未启用，业务页面和手动录入仍可用。
 
-Docker Compose 默认不启动识别依赖。启用前在 `deploy/.env` 设置随机 32 字符以上的 `RECOGNITION_API_KEY`、`RECOGNITION_WORKER_URL=http://recognition:8000`，然后使用 `docker compose --env-file deploy/.env --profile recognition up --build -d`。worker 只加入应用专用 bridge，宿主机端口仅绑定到 `127.0.0.1:8001`（可通过 `RECOGNITION_WORKER_PORT` 调整），不接受公网连接。开发环境的 Nest 在宿主机运行时，可在 `apps/server/.env` 配置 `RECOGNITION_WORKER_URL=http://127.0.0.1:8001` 和相同 API key，并执行 `docker compose --env-file deploy/.env --profile recognition up -d recognition` 启动 worker。模型预下载需要出站网络；可运行 `docker compose --env-file deploy/.env --profile recognition run --rm recognition python /app/preload_models.py`，模型保存到 `recognition-models` 卷。Whisper 模型可用 `WHISPER_MODEL` 调整，下载需要额外磁盘空间。关闭识别可停止 recognition profile 并清空识别地址配置，普通应用不依赖 worker。
+Docker Compose 默认不启动识别依赖。生产部署如需识别，可在 `deploy/.env` 设置随机 32 字符以上的 `RECOGNITION_API_KEY`、`RECOGNITION_WORKER_URL=http://recognition:8000`，然后使用 `docker compose --env-file deploy/.env --profile recognition up --build -d`。worker 只加入应用专用 bridge，宿主机端口仅绑定到 `127.0.0.1:8001`（可通过 `RECOGNITION_WORKER_PORT` 调整），不接受公网连接。模型预下载需要出站网络；可运行 `docker compose --env-file deploy/.env --profile recognition run --rm recognition python /app/preload_models.py`，模型保存到 `recognition-models` 卷。开发环境无需 Docker，直接运行仓库根目录的 `python start.py` 即可安装本地依赖并启动 worker。关闭识别可停止 recognition profile 并清空识别地址配置，普通应用不依赖 worker。
 
 ### 数据导出
 
