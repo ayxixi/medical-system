@@ -50,6 +50,8 @@
 
 ### 工程自动化技能
 
+- [AI 协作开发流程](../AGENTS.md)规定 Issue、六阶段产物、PR 和校验要求。
+
 - [../.github/skills/README.md](../.github/skills/README.md)：仓库级 Copilot skills 总览。
 - [../.github/skills/doc-router/README.md](../.github/skills/doc-router/README.md)：文档分流 skill。
 - [../.github/skills/plan-sync/README.md](../.github/skills/plan-sync/README.md)：活计划同步 skill。
