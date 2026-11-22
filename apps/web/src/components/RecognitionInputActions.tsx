@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Alert, App as AntdApp, Button, Space, Typography } from 'antd';
+import { Alert, App as AntdApp, Button, Input, Radio, Space, Typography } from 'antd';
 import { AudioOutlined, CameraOutlined, StopOutlined } from '@ant-design/icons';
 import { extractErrorMessage } from '@/api/client';
 import { recognizeImage, transcribeAudio } from '@/api/recognition';
@@ -41,6 +41,7 @@ async function prepareImage(file: File): Promise<File> {
 
 type ImageSource = 'camera' | 'album';
 type PendingAction = ImageSource | 'microphone' | 'transcription';
+type FillMode = 'append' | 'replace';
 
 const MAX_RECORDING_MS = 60_000;
 
@@ -48,6 +49,8 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
   const { message } = AntdApp.useApp();
   const [failure, setFailure] = useState<string>();
   const [pendingAction, setPendingAction] = useState<PendingAction>();
+  const [recognizedText, setRecognizedText] = useState('');
+  const [fillMode, setFillMode] = useState<FillMode>('append');
   const busy = pendingAction !== undefined;
   const [recording, setRecording] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -76,19 +79,26 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     };
   }, []);
 
-  const fillText = (text: string) => {
+  const previewText = (text: string) => {
     const recognized = text.trim();
     if (!recognized) {
       message.warning('没有识别到文字，请手动输入或换一份媒体。');
       return;
     }
-    const combined = [getCurrentText()?.trim(), recognized].filter(Boolean).join('\n');
-    if (combined.length > 1000) {
-      message.error('填入后会超过 1000 字限制，请先缩短现有内容或重新识别。');
-      return;
-    }
-    onText(combined);
-    message.success('识别结果已填入，可修改后再保存。');
+    setRecognizedText(recognized);
+    setFillMode('append');
+  };
+
+  const currentText = getCurrentText()?.trim() ?? '';
+  const combinedText = fillMode === 'replace'
+    ? recognizedText
+    : [currentText, recognizedText].filter(Boolean).join('\n');
+  const previewTooLong = recognizedText.length > 1000;
+  const confirmFill = () => {
+    if (previewTooLong || combinedText.length > 1000) return;
+    onText(combinedText);
+    setRecognizedText('');
+    message.success('内容已填入表单，可继续修改后保存。');
   };
 
   const runImage = async (source: ImageSource, file?: File) => {
@@ -103,7 +113,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
       });
       if (signal.aborted) return;
       const text = await recognizeImage(prepared, signal);
-      if (!signal.aborted) fillText(text);
+      if (!signal.aborted) previewText(text);
     } catch (error) {
       if (!signal.aborted) setFailure(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
     } finally {
@@ -131,7 +141,7 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
     setPendingAction('transcription');
     try {
       const text = await transcribeAudio(blob, signal);
-      if (!signal.aborted) fillText(text);
+      if (!signal.aborted) previewText(text);
     } catch (error) {
       if (!signal.aborted) setFailure(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
     } finally {
@@ -240,6 +250,39 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
         )}
       </Space>
       {failure && <Alert type="error" message={failure} showIcon />}
+      {recognizedText && (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Typography.Text strong>识别结果预览</Typography.Text>
+          <Input.TextArea
+            aria-label="识别结果预览"
+            value={recognizedText}
+            onChange={(event) => setRecognizedText(event.target.value)}
+            autoSize={{ minRows: 3, maxRows: 8 }}
+          />
+          <Radio.Group
+            aria-label="填入方式"
+            value={fillMode}
+            onChange={(event) => setFillMode(event.target.value)}
+            optionType="button"
+            buttonStyle="solid"
+          >
+            <Radio.Button value="append">追加到现有内容</Radio.Button>
+            <Radio.Button value="replace">替换现有内容</Radio.Button>
+          </Radio.Group>
+          <Typography.Text type={previewTooLong || combinedText.length > 1000 ? 'danger' : 'secondary'}>
+            {fillMode === 'append' ? '追加后' : '替换后'}：{combinedText.length} / 1000 字
+          </Typography.Text>
+          {(previewTooLong || combinedText.length > 1000) && (
+            <Alert type="warning" showIcon message="内容超过 1000 字。请编辑识别结果或选择替换后再填入。" />
+          )}
+          <Space>
+            <Button type="primary" disabled={previewTooLong || combinedText.length > 1000} onClick={confirmFill}>
+              确认填入
+            </Button>
+            <Button onClick={() => setRecognizedText('')}>取消</Button>
+          </Space>
+        </Space>
+      )}
       {busy && <Typography.Text role="status">正在处理媒体并识别，请稍候…</Typography.Text>}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         照片和录音仅用于识别。识别结果可修改，随表单保存。录音最长 60 秒，识别上传上限 10 MB。
