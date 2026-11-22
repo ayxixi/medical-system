@@ -52,7 +52,9 @@ def acquire_start_lock():
 
 def require_port(port):
     with socket.socket() as sock:
-        if not WINDOWS:
+        if WINDOWS:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
@@ -254,14 +256,28 @@ def main():
         action="store_true",
         help="不启动 OCR/语音识别 worker（仍可使用系统其它功能）",
     )
+    parser.add_argument("--backend-port", type=int, default=3000, help="后端监听端口")
     args = parser.parse_args()
+    backend_port = args.backend_port
+    if not 1 <= backend_port <= 65535 or backend_port == 5173 or (
+        backend_port == 8001 and not args.no_recognition
+    ):
+        parser.error("后端端口须在 1–65535 范围内，且不能与前端或已启用的识别服务重复。")
+    backend_url = f"http://127.0.0.1:{backend_port}"
     acquire_start_lock()
+    if WINDOWS:
+        from windows_job import bind_launcher_lifetime
+
+        try:
+            bind_launcher_lifetime()
+        except OSError as exc:
+            raise RuntimeError(f"无法启用 Windows 服务自动清理：{exc}") from exc
 
     node = shutil.which("node")
     npm = shutil.which("npm.cmd" if WINDOWS else "npm")
     if not node or not npm:
         raise RuntimeError("请先安装受支持的 Node.js LTS 和 npm。")
-    for port in (3000, 5173):
+    for port in (backend_port, 5173):
         require_port(port)
 
     config = SERVER / ".env"
@@ -277,7 +293,8 @@ def main():
     env = os.environ.copy()
     env.update(
         NODE_ENV="development",
-        PORT="3000",
+        PORT=str(backend_port),
+        MEDICAL_DEV_API_TARGET=backend_url,
         BIND_HOST="127.0.0.1",
         DATABASE_URL="file:./local-dev.db",
         FILE_STORAGE="local",
@@ -297,6 +314,8 @@ def main():
         cwd=SERVER, env=migration_env, check=True,
     )
 
+    subprocess.run([npm, "run", "build"], cwd=SERVER, env=env, check=True)
+
     process_options = (
         {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
         if WINDOWS else {"start_new_session": True}
@@ -315,13 +334,13 @@ def main():
 
         # Repeat the preflight after dependency installation/model downloads. The
         # initial check alone leaves a long window in which another app could bind.
-        require_port(3000)
+        require_port(backend_port)
         require_port(5173)
         backend = subprocess.Popen(
-            [npm, "run", "start:dev"], cwd=SERVER, env=env, **process_options
+            [node, "--enable-source-maps", str(SERVER / "dist" / "main")], cwd=SERVER, env=env, **process_options
         )
         processes.append(backend)
-        wait_until_ready("http://127.0.0.1:3000/auth/me", backend, "后端", 401)
+        wait_until_ready(f"{backend_url}/auth/me", backend, "后端", 401)
         require_port(5173)
         frontend = subprocess.Popen(
             [npm, "run", "dev", "--", "--host", "127.0.0.1", "--strictPort"],
