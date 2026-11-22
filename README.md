@@ -1,6 +1,6 @@
 # 医疗记录系统
 
-这是一个全栈医疗记录系统：后端基于 NestJS（位于 `apps/server/`），前端基于 React + Vite + Ant Design（位于 `apps/web/`）。优先支持本地部署，同时保留后续迁移到 Docker、PostgreSQL 和 S3 兼容对象存储的扩展路径。
+这是一个全栈医疗记录系统：后端基于 NestJS（位于 `apps/server/`），前端基于 React + Vite + Ant Design（位于 `apps/web/`）。支持本机开发和 Docker Compose 单机部署；当前数据库为 SQLite，附件支持本机目录和 S3 兼容对象存储。PostgreSQL 尚未验证。
 
 ## 当前功能范围
 
@@ -30,6 +30,7 @@
 - 专题设计文档：`docs/design/`
 - 实施记录：`docs/implementation-records/`
 - 测试运行手册：`docs/runbooks/testing.md`
+- Docker 部署运行手册：`docs/runbooks/docker-deployment.md`
 - Copilot 会话续接说明：`PLAN_USAGE.md`
 
 ## 项目结构
@@ -90,11 +91,7 @@ npm run dev
 
 开发地址默认为 `http://localhost:5173`。Vite 已配置代理：前端的 `/api/*` 请求会被转发到 `http://localhost:3000`，因此本地开发只需保证后端在 3000 端口运行即可，无需额外的 CORS 配置。
 
-生产部署时可通过环境变量 `VITE_API_BASE_URL` 指定后端地址，例如：
-
-```env
-VITE_API_BASE_URL=https://api.example.com
-```
+前端容器镜像在构建时使用同域 `/api` 地址，Nginx 会把 API 请求代理给 NestJS。Docker 部署无需单独设置前端 API 地址。
 
 ## 前端发布与使用
 
@@ -121,12 +118,6 @@ npm run preview
 ```
 
 默认预览地址通常为 `http://localhost:4173`。
-
-### 前端发布注意事项
-
-- 生产构建前请确认 `VITE_API_BASE_URL` 已正确指向后端地址
-- 前端是单页应用（SPA），静态服务器或 Nginx 需要把非静态资源请求回退到 `index.html`
-- 如果与后端分域部署，请确保后端允许对应来源访问，或通过反向代理把前后端收敛到同一域名下
 
 ### 前端使用流程
 
@@ -209,7 +200,7 @@ Authorization: Bearer <accessToken>
 
 两个接口要求 JWT 登录；媒体上限默认 10 MB，录音时长上限 60 秒。NestJS 将媒体转发到管理员配置的自托管 Python worker，RapidOCR 与 faster-whisper 在应用主机处理。worker 不对公网开放，Compose 中仅绑定宿主机 loopback；识别结果只填入可编辑的诊断/就诊备注表单，不会自动保存。临时录音处理后删除；系统不记录媒体或识别正文。若 worker 未启用，业务页面和手动录入仍可用。
 
-Docker Compose 默认不启动识别依赖。生产部署如需识别，可在 `deploy/.env` 设置随机 32 字符以上的 `RECOGNITION_API_KEY`、`RECOGNITION_WORKER_URL=http://recognition:8000`，然后使用 `docker compose --env-file deploy/.env --profile recognition up --build -d`。worker 只加入应用专用 bridge，宿主机端口仅绑定到 `127.0.0.1:8001`（可通过 `RECOGNITION_WORKER_PORT` 调整），不接受公网连接。模型预下载需要出站网络；可运行 `docker compose --env-file deploy/.env --profile recognition run --rm recognition python /app/preload_models.py`，模型保存到 `recognition-models` 卷。开发环境无需 Docker，直接运行仓库根目录的 `python start.py` 即可安装本地依赖并启动 worker。关闭识别可停止 recognition profile 并清空识别地址配置，普通应用不依赖 worker。
+Docker Compose 默认不启动识别依赖。部署识别 worker、下载模型和关闭识别的方法见 [Docker 部署运行手册](docs/runbooks/docker-deployment.md#可选启用本机识别)。worker 仅加入应用专用 bridge，宿主机端口绑定到 `127.0.0.1`，不接受局域网或公网直连。开发环境无需 Docker，直接运行仓库根目录的 `python start.py` 即可安装本地依赖并启动 worker。
 
 ### 数据导出
 
@@ -264,82 +255,17 @@ JWT_EXPIRES_IN=1d
 
 ### 部署前准备
 
-- 安装 Node.js 18 或更高版本
-- 安装 npm
-- 如需使用 Docker 部署，提前安装 Docker Desktop，并确保 `docker compose` 可用
-- 确认 `apps/server/.env` 已存在且 `JWT_SECRET` 已设置为长度不少于 16 位的随机字符串
+- 本机开发：安装 Node.js LTS、npm、Python 3.11/3.12
+- Docker 部署：安装 Docker Engine 或 Docker Desktop，并确保 `docker compose` 可用；宿主机不需要安装 Node.js
+- 配置文件、生产密钥和注册邀请码准备方式见 [Docker 部署运行手册](docs/runbooks/docker-deployment.md)
 
-### 本地部署
+### 本机开发
 
-在仓库根目录执行以下步骤：
-
-```bash
-cd apps/server
-npm install
-npm run prisma:generate
-npm run prisma:migrate:dev
-npm run start:dev
-```
-
-启动成功后，服务默认监听：
-
-```text
-http://localhost:3000
-```
-
-如果是首次部署，建议按下面顺序验证：
-
-1. 注册账号获取 `accessToken`
-2. 使用 `accessToken` 访问 `/users`
-3. 创建家庭成员后再创建就诊记录与附件
-
-认证调用示例：
-
-```bash
-# 1. 注册，返回 { accessToken, account, defaultUserId }
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","email":"alice@example.com","password":"hunter2hunter2","name":"Alice"}'
-
-# 2. 或后续登录
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"identifier":"alice","password":"hunter2hunter2"}'
-
-# 3. 使用 token 访问受保护接口
-curl http://localhost:3000/users -H "Authorization: Bearer <accessToken>"
-```
+推荐使用仓库根目录的 `python start.py`，它会准备本地配置、迁移数据库并启动前后端和本机识别服务。手动运行请参考前面的开发启动说明；生产环境不要使用 `prisma migrate dev`。
 
 ### Docker 生产部署
 
-Docker Compose 构建单容器，容器内 Nginx 提供前端并把 `/api` 代理给 NestJS。主机只映射 8080 端口，默认绑定到 `127.0.0.1`，可接入同机 Caddy 或 Nginx 并由反向代理提供 HTTPS。SQLite 数据库和附件写入 Docker 命名卷 `medical-data`。
-
-准备 `apps/server/.env` 并设置生产密钥后，在仓库根目录运行：
-
-```bash
-cp deploy/.env.example deploy/.env
-# 按需调整 deploy/.env，并确保注册邀请码是独立的随机值
-docker compose --env-file deploy/.env up --build -d
-docker compose --env-file deploy/.env ps
-```
-
-首次部署到已有工作目录时，如果命名卷还没有数据库，入口脚本会从 `apps/server/prisma/dev.db` 导入一份副本，并把旧附件复制到数据卷；原数据库和附件目录以只读方式挂载，不会被改写。旧数据库副本另存于卷内 `/data/legacy-original/dev.db`。当前 `Account` 迁移会清空无法关联账户的旧记录，因此新运行库可能没有旧记录；原库副本与附件仍保留，便于后续导入工具处理。确认迁移和附件后再考虑清理源文件及快照。
-
-Compose 强制配置邀请注册码，且不直接将 HTTP 服务暴露到外网。若反向代理位于另一台机器，需显式将 `APP_BIND_ADDRESS` 设为受防火墙限制的私网地址。只有请求经过可信代理时才设置 `TRUST_PROXY=true`。
-
-健康检查会确认 Nest 和数据库均可查询。每次启动会先运行数据库迁移。备份数据库、旧库快照和本地附件：
-
-```bash
-deploy/scripts/backup.sh
-```
-
-恢复前先确认备份来源。恢复会停止服务并覆盖当前数据库与附件：
-
-```bash
-deploy/scripts/restore.sh backups/medical-backup-时间戳.tar.gz
-```
-
-备份文件和 SHA256 清单应转存到与应用主机分离且访问受控的位置。恢复脚本先校验 SHA256 并解压到暂存目录，通过文件检查后才切换数据库和附件；旧数据暂存在数据卷的 `/data/.restore-rollback`，完成验证后再按维护流程清理。服务重新启动后会检查健康状态。首次上线前应在独立环境实际演练备份与恢复。
+Docker Compose 构建单容器，Nginx 提供前端并把 `/api` 代理给 NestJS。主机映射 8080 端口，默认绑定到 `127.0.0.1`；SQLite 数据库、附件和旧库快照写入 Docker 命名卷 `medical-data`。从代码检出到首次启动、HTTPS、升级和备份恢复的完整步骤见 [Docker 部署运行手册](docs/runbooks/docker-deployment.md)。
 
 ### 生产部署注意事项
 
@@ -348,9 +274,7 @@ deploy/scripts/restore.sh backups/medical-backup-时间戳.tar.gz
 - Docker 部署使用 `medical-data` 命名卷持久化 SQLite 与附件，升级镜像时保留该卷并定期演练恢复
 - 如使用同机反向代理，请确保将外部流量转发到宿主机 `8080` 端口
 
-> 2026-04-29 引入 `Account` 与 `User.accountId` 的迁移会清空旧的
-> `User`、`Visit`、`DiagnosisRecord`、`Medication`、`VisitFile` 开发数据。
-> 对已有开发库执行 `npm run prisma:migrate:dev` 时，请预期旧数据会被重建或清空。
+旧版开发库中的用户和病历不能自动关联到新账户。Docker 首次初始化会把源 SQLite 数据库和附件复制到 `medical-data` 卷，并另存数据库快照；后续迁移可能清空运行库中无法归属账号的业务数据。源文件和卷内快照保留，不会被迁移脚本写回或删除。详细说明见 [数据保留与首次部署](docs/runbooks/docker-deployment.md#已有本机数据的处理)。
 
 ## 文件上传说明
 
@@ -391,5 +315,5 @@ S3_SECRET_KEY=...
 ## 备注
 
 - Prisma schema 与迁移文件位于 `apps/server/prisma`
-- 当前 Docker Compose 同时挂载了 `apps/server/uploads` 和 `apps/server/prisma`
+- Docker 首次初始化以只读方式挂载 `apps/server/uploads` 和 `apps/server/prisma`，随后将数据复制到 `medical-data` 卷；运行时数据不直接写回源码目录
 - `Visit`、`DiagnosisRecord`、`Medication`、`VisitFile`、`User` 均已按当前账号隔离，跨账号访问会返回 404

@@ -36,7 +36,7 @@
 
 - 前端单页应用：位于 `apps/web/`，负责登录、成员管理、就诊与详情操作。
 - 后端服务：位于 `apps/server/`，负责认证、业务 CRUD、文件存储与账号隔离。
-- 数据库：当前默认使用 SQLite，后续预留 PostgreSQL 演进路径。
+- 数据库：当前仅配置并使用 SQLite；PostgreSQL 是后续迁移方向，尚未实现或验证。
 - 文件存储：当前支持本地存储，并已预留 S3 兼容存储实现。
 - 文档与运维资产：位于 `docs/` 与 `docker/`。
 
@@ -48,7 +48,7 @@ flowchart LR
   API --> Auth[认证与鉴权\nauth module]
   API --> Domain[业务模块\nuser visit record medication file]
   Domain --> Prisma[Prisma ORM]
-  Prisma --> DB[(SQLite / PostgreSQL)]
+  Prisma --> DB[(SQLite)]
   Domain --> Storage[本地文件 / S3 存储]
 ```
 
@@ -129,6 +129,7 @@ sequenceDiagram
 
 - `docs/`：计划、架构、设计、实施记录、运行手册与 ADR。
 - `docker/` 与 `docker-compose.yml`：容器化相关配置。
+- [Docker Compose 部署运行手册](runbooks/docker-deployment.md)：镜像构建、数据卷、识别 worker、升级和备份恢复流程。
 
 ### 4.4 模块级代码导航
 
@@ -236,7 +237,7 @@ sequenceDiagram
 
 | 模块 | Service 主要职责 | Repository 边界 | Prisma 典型隔离约束 |
 | --- | --- | --- | --- |
-| `auth` | 注册账号、登录校验、返回当前账号 | 负责按邮箱查账号、创建账号与默认成员 | 认证域主要围绕 `Account`，不走业务资源跨账号过滤 |
+| `auth` | 注册账号、登录校验、返回当前账号 | 注册时按用户名和邮箱查重；登录支持用户名，旧账号兼容邮箱 | 认证域主要围绕 `Account`，不走业务资源跨账号过滤 |
 | `user` | 成员 CRUD、保证账号下至少保留一个成员 | 仅允许访问当前账号下的成员 | `where: { accountId }`、`where: { id, accountId }`，更新/删除使用 `updateMany` / `deleteMany` |
 | `visit` | 校验成员归属、处理筛选/排序/分页、维护就诊主记录 | 仅允许访问当前账号成员名下的就诊 | `where: { user: { accountId } }`，创建前先校验 `userId + accountId` |
 | `record` | 基于某次就诊新增、更新、删除诊断 | 仅允许访问当前账号就诊下的诊断记录 | `where: { visit: { user: { accountId } } }`，创建前先校验 `visitId + accountId` |
