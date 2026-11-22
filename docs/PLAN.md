@@ -22,7 +22,7 @@
 | 就诊列表聚合与过滤/排序 | ✅ 已完成 | `GET /visits` 新增 `q`、`sortBy`、`order`；前端表头可点击排序（`date` / `createdAt`）与关键字搜索框 |
 | 中文规范与文案统一 | ✅ 已完成 | instructions 固化、README 中文化、后端用户可见消息与校验提示中文化 |
 | 附件清理与重试 | 已实现 | SQLite 事务登记删除和替换，后台清理并重试。S3 / MinIO 待联调 |
-| 单元测试补齐 | 🟡 已开始 | 已新增 `FileService`、`AuthService`、`VisitService`、`RecordService`、`MedicationService` 与 `AuthRepository`、`VisitRepository`、`RecordRepository`、`MedicationRepository`、`FileRepository` 单元测试，仍需继续扩大 service / repository 覆盖 |
+| 单元测试补齐 | 🟡 已开始 | service / repository 已覆盖 auth、user、visit、record、medication、file；另覆盖附件清理队列。存储服务、控制器和异常/边界分支仍可继续补齐 |
 | Phase 3：Postgres + S3 | 🟡 已部分完成 | `S3StorageService` 已实现，仍需切换 datasource 并完成 Postgres / MinIO 实测 |
 | Phase 4：审计日志 / 备份导出 | ⬜ 待开始 | 操作审计、按账号导出数据 |
 
@@ -40,11 +40,12 @@
 - [x] 文件删除接口与 S3 存储真实实现（含 `.env.example` 与 README 同步）
 - [x] 中文规范 instructions 与 README / 后端用户可见文本中文化
 - [x] 单元测试补齐（已覆盖 `AuthService`、`VisitService`、`RecordService`、`MedicationService`、`FileService` 与 `AuthRepository`、`VisitRepository`、`RecordRepository`、`MedicationRepository`、`FileRepository`）
+- [x] 家庭成员和附件清理关键路径测试（`UserService`、`UserRepository`、`AttachmentCleanupService`，覆盖账号过滤、最后成员保护、并发清理、引用保护与重试）
 
 ## 三、下一步候选（按优先级）
 
-1. **服务层 / 仓储层单元测试**
-   - 用 `prisma-mock` 或 jest 手写 mock，重点覆盖账号隔离分支
+1. **剩余单元测试**
+   - 补充存储服务、控制器和未覆盖的异常/边界分支，重点维持账号过滤和对象存储失败恢复行为
 2. **路由级 lazy import**
    - 当前 `dist` 主包 1.3MB，按路由拆包到 < 500KB
 3. **Phase 3：PostgreSQL + S3 验证**

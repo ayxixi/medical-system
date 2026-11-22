@@ -33,6 +33,7 @@ npm test -- --runInBand
 - 认证与登录逻辑
 - 账号隔离
 - Service / Repository 的领域行为
+- 成员删除边界与附件清理队列保护/重试
 - Prisma 测试库初始化
 
 ### 常见问题
