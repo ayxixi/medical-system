@@ -17,23 +17,23 @@ export class UpdateVisitDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  hospital?: string;
+  hospital?: string | null;
 
   @Transform(({ value }) => trimOptionalString(value))
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  department?: string;
+  department?: string | null;
 
   @Transform(({ value }) => trimOptionalString(value))
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  doctor?: string;
+  doctor?: string | null;
 
   @Transform(({ value }) => trimOptionalString(value))
   @IsOptional()
   @IsString()
   @MaxLength(1000)
-  note?: string;
+  note?: string | null;
 }

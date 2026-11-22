@@ -102,10 +102,10 @@ export class VisitRepository {
     accountId: string,
     data: {
       date?: Date;
-      hospital?: string;
-      department?: string;
-      doctor?: string;
-      note?: string;
+      hospital?: string | null;
+      department?: string | null;
+      doctor?: string | null;
+      note?: string | null;
     },
   ) {
     const result = await this.prisma.visit.updateMany({

@@ -57,7 +57,13 @@ export interface CreateVisitPayload {
   note?: string;
 }
 
-export type UpdateVisitPayload = Partial<Omit<CreateVisitPayload, 'userId'>>;
+export interface UpdateVisitPayload {
+  date?: string;
+  hospital?: string | null;
+  department?: string | null;
+  doctor?: string | null;
+  note?: string | null;
+}
 
 export interface ListVisitsQuery {
   userId?: string;
