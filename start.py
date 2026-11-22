@@ -167,13 +167,24 @@ def prepare_recognition(config):
     if not stamp.is_file() or stamp.read_text(encoding="utf-8") != dependency_hash:
         print("正在本机安装 OCR/语音识别依赖…", flush=True)
         pip_env = os.environ.copy()
-        pip_env.setdefault("PIP_DEFAULT_TIMEOUT", "60")
-        subprocess.run(
-            [str(executable), "-m", "pip", "install", "-r", str(requirements)],
-            cwd=recognition,
-            env=pip_env,
-            check=True,
-        )
+        pip_env.setdefault("PIP_DEFAULT_TIMEOUT", "180")
+        try:
+            subprocess.run(
+                [
+                    str(executable), "-m", "pip", "install",
+                    "--timeout", "180", "--retries", "5",
+                    "-r", str(requirements),
+                ],
+                cwd=recognition,
+                env=pip_env,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                "本机识别依赖安装失败。若日志显示网络超时，请检查能否访问 "
+                "pypi.org 和 files.pythonhosted.org，然后重新运行 `python start.py`；"
+                "也可配置可用的 pip 镜像源后重试。"
+            ) from exc
         stamp.write_text(dependency_hash, encoding="utf-8")
 
     values = env_file_values(config)
