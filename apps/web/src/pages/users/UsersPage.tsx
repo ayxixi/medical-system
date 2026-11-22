@@ -111,7 +111,7 @@ export default function UsersPage() {
 
   return (
     <div>
-      <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+      <Space wrap style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
           家庭成员
         </Typography.Title>
@@ -120,6 +120,7 @@ export default function UsersPage() {
         </Button>
       </Space>
       <Table<User>
+        scroll={{ x: "max-content" }}
         rowKey="id"
         loading={isLoading}
         dataSource={data ?? []}

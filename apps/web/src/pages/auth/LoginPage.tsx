@@ -42,7 +42,7 @@ export default function LoginPage() {
         padding: 24,
       }}
     >
-      <Card style={{ width: 380 }}>
+      <Card style={{ width: 380, maxWidth: "calc(100% - 24px)" }}>
         <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
           登录
         </Typography.Title>

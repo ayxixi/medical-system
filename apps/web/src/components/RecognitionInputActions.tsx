@@ -10,6 +10,35 @@ interface Props {
   disabled?: boolean;
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_EDGE = 4096;
+
+async function prepareImage(file: File): Promise<File> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+    if (scale === 1 && file.size <= MAX_IMAGE_BYTES &&
+        ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return file;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('无法处理图片，请改用 JPEG 或 PNG。');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
+    if (!blob || blob.size > MAX_IMAGE_BYTES) throw new Error('图片过大，请裁剪后重试。');
+    return new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const MAX_RECORDING_MS = 60_000;
 
 export function RecognitionInputActions({ currentText = '', onText, disabled = false }: Props) {
@@ -17,6 +46,7 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -49,25 +79,25 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
 
   const runImage = async (file?: File) => {
     if (!file) return;
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      message.error('请选择 JPEG、PNG 或 WebP 图片。');
-      if (imageInput.current) imageInput.current.value = '';
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      message.error('图片不能超过 10 MB。');
-      if (imageInput.current) imageInput.current.value = '';
-      return;
-    }
     setBusy(true);
     try {
-      fillText(await recognizeImage(file));
+      const prepared = await prepareImage(file).catch((error: unknown) => {
+        if (error instanceof DOMException) throw new Error('无法读取这张图片，请改用 JPEG 或 PNG。');
+        throw error;
+      });
+      fillText(await recognizeImage(prepared));
     } catch (error) {
       message.error(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
     } finally {
       setBusy(false);
-      if (imageInput.current) imageInput.current.value = '';
+
     }
+  };
+
+  const selectImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    void runImage(file);
   };
 
   const uploadRecording = async (blob: Blob) => {
@@ -140,29 +170,30 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
   return (
     <Space direction="vertical" size={4} style={{ width: '100%', marginTop: 8 }}>
       <Space wrap>
-        <input
-          ref={imageInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="environment"
-          hidden
-          onChange={(event) => void runImage(event.target.files?.[0])}
-        />
+        <input ref={imageInput} type="file" accept="image/*" hidden onChange={selectImage} />
+        <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={selectImage} />
         <Button
-          size="small"
+          htmlType="button"
           icon={<CameraOutlined />}
           disabled={disabled || busy || recording}
-          loading={busy}
+          onClick={() => cameraInput.current?.click()}
+        >
+          拍照识别
+        </Button>
+        <Button
+          htmlType="button"
+          disabled={disabled || busy || recording}
           onClick={() => imageInput.current?.click()}
         >
-          拍照或选图识别
+          从相册选图
         </Button>
         {recording ? (
-          <Button size="small" danger icon={<StopOutlined />} onClick={stopRecording}>
+          <Button htmlType="button" size="small" danger icon={<StopOutlined />} onClick={stopRecording}>
             停止并转写
           </Button>
         ) : (
           <Button
+            htmlType="button"
             size="small"
             icon={<AudioOutlined />}
             disabled={disabled || busy}
@@ -173,6 +204,7 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
           </Button>
         )}
       </Space>
+      {busy && <Typography.Text role="status">正在处理媒体并识别，请稍候…</Typography.Text>}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         媒体最长 60 秒、最大 10 MB，仅发送到管理员配置的本机识别服务；结果可编辑，不会自动保存。
       </Typography.Text>

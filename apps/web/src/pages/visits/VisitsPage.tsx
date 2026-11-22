@@ -132,7 +132,7 @@ export default function VisitsPage() {
 
   return (
     <div>
-      <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+      <Space wrap style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
           就诊记录
         </Typography.Title>
@@ -168,7 +168,7 @@ export default function VisitsPage() {
           allowClear
           placeholder="搜索医院 / 科室 / 医生 / 诊断 / 用药 / 备注"
           enterButton={<SearchOutlined />}
-          style={{ width: 320 }}
+          style={{ width: "min(320px, calc(100vw - 48px))" }}
           value={keywordInput}
           onChange={(event) => setKeywordInput(event.target.value)}
           onSearch={(value) =>
@@ -187,6 +187,7 @@ export default function VisitsPage() {
       </Space>
 
       <Table<Visit>
+        scroll={{ x: "max-content" }}
         rowKey="id"
         loading={visitsQuery.isLoading}
         dataSource={visitsQuery.data ?? []}
