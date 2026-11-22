@@ -63,7 +63,7 @@ export function validateEnv(
     LOGIN_LOCKOUT_SECONDS: Joi.number().integer().min(60).max(86400).default(900),
     RECOGNITION_WORKER_URL: Joi.string().uri({ scheme: ['http', 'https'] }).optional().allow(''),
     RECOGNITION_API_KEY: Joi.string().optional().allow('').when('RECOGNITION_WORKER_URL', {
-      is: Joi.string().uri({ scheme: ['http', 'https'] }),
+      is: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
       then: Joi.string().min(32).required(),
     }),
     RECOGNITION_TIMEOUT_MS: Joi.number().integer().min(1000).max(300000).default(180000),
