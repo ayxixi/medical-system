@@ -26,7 +26,7 @@
 | 附件清理与重试 | 已实现 | SQLite 事务登记删除和替换，后台清理并重试。S3 / MinIO 待联调 |
 | 单元测试补齐 | 🟡 已开始 | service / repository 已覆盖 auth、user、visit、record、medication、file；另覆盖附件清理队列。存储服务、控制器和异常/边界分支仍可继续补齐 |
 | Phase 3：Postgres + S3 | 🟡 已部分完成 | `S3StorageService` 已实现，仍需切换 datasource 并完成 Postgres / MinIO 实测 |
-| Phase 4：审计日志 / 账号数据导出 | ⬜ 待开始 | 操作审计、按账号导出 JSON；Docker 数据卷备份/恢复已单独实现 |
+| Phase 4：审计日志 / 账号数据导出 | 🟡 部分完成 | 操作审计与按账号 JSON 导出已实现；仍需评估 ZIP 附件打包和导入恢复流程。Docker 数据卷备份/恢复已单独实现 |
 | Phase 5：本机 OCR 与语音录入 | ⬜ 计划扩展 | RapidOCR 识别中文题图、faster-whisper 转写中文录音；识别结果先进入现有文本表单，人工修改并确认保存 |
 | 历史孤儿附件盘点 | ⬜ 待处理 | 附件清理队列已覆盖后续删除/替换，尚未盘点旧数据遗留的孤儿文件 |
 
@@ -58,8 +58,9 @@
    - docker-compose 启 Postgres，切换 `DATABASE_URL`
    - 设置 `FILE_STORAGE=s3`，配 MinIO 验证 `S3StorageService` 与附件清理重试
 4. **Phase 4：审计日志 / 账号数据导出**
-   - 新增 `AuditLog` 表与拦截器
-   - 提供 `GET /export` 按账号导出 JSON
+   - ✅ 新增 `AuditLog` 表与全局拦截器（仅业务写操作元数据）
+   - ✅ 提供 `GET /export` 按账号导出 JSON 与附件元数据
+   - 后续：可选附件原件打包导出、版本化数据导入/恢复和审计管理界面
 5. **Phase 5：本机 OCR 与语音录入**
    - 先确定“本机”指部署系统的应用主机，还是每个网页用户自己的设备；Polaris 参考实现把媒体上传到自托管后端处理，并非浏览器本地推理
    - 确认文本落点：本系统目前没有“题干”字段；首选把草稿插入现有 `DiagnosisRecord.diagnosis` 或 `Visit.note` 编辑框，用户修改后仍通过原有保存动作提交，不自动建记录
