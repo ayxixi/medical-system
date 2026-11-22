@@ -63,7 +63,7 @@ medical-system/
 python start.py
 ```
 
-如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。启动脚本会在 `apps/recognition/.venv` 创建隔离的 Python 环境并安装识别依赖；OCR/Whisper 模型保存在 `apps/recognition/models`，重复运行会复用。脚本自动生成本地 JWT 和识别 worker 密钥，密钥保存在 `apps/server/.env`，并启动只绑定本机地址的识别服务。脚本还会初始化独立的 `apps/server/prisma/local-dev.db`，附件保存在 `apps/server/uploads/local-dev/`。开发环境默认启用 OCR/语音，不需要 Docker；如暂时不需要识别，可用 `python start.py --no-recognition`。
+如果本机命令是 `python3` 或 Windows 的 `py`，可换用对应命令。启动脚本会在 `apps/recognition/.venv` 创建隔离的 Python 环境并安装识别依赖；OCR/Whisper 模型保存在 `apps/recognition/models`，重复运行会复用。首次依赖和模型下载需要访问 Python 包索引及模型站点；网络中断后重新运行脚本即可重试。脚本自动生成本地 JWT 和识别 worker 密钥，密钥保存在 `apps/server/.env`，并启动只绑定本机地址的识别服务。脚本还会初始化独立的 `apps/server/prisma/local-dev.db`，附件保存在 `apps/server/uploads/local-dev/`。开发环境默认启用 OCR/语音，不需要 Docker；如暂时不需要识别，可用 `python start.py --no-recognition`。
 
 启动后打开 `http://127.0.0.1:5173/`，首次使用可在页面注册。
 后端使用本机 3000 端口，按 Ctrl+C 停止前后端及本次启动的识别服务；本地识别环境、配置和模型缓存会保留。启动脚本同一项目同时只允许运行一个实例，并会在服务启动前检查 3000、5173、8001 端口；若端口被其它程序占用，脚本会提示检查进程，不会自动结束其他程序。重复运行会继续使用同一份开发数据。
