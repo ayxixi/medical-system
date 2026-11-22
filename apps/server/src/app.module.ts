@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { HealthController } from './health.controller';
 import { EnvModule } from './config/env.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -21,6 +22,7 @@ import { PrismaModule } from './prisma/prisma.module';
     MedicationModule,
     FileModule,
   ],
+  controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,
