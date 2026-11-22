@@ -13,15 +13,54 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-false}
       REGISTRATION_MODE: ${REGISTRATION_MODE:-invite}
       REGISTRATION_INVITE_CODES: ${REGISTRATION_INVITE_CODES:?请通过环境变量配置邀请注册验证码}
+      RECOGNITION_WORKER_URL: ${RECOGNITION_WORKER_URL:-}
+      RECOGNITION_API_KEY: ${RECOGNITION_API_KEY:-}
+      RECOGNITION_TIMEOUT_MS: ${RECOGNITION_TIMEOUT_MS:-180000}
+      RECOGNITION_MAX_FILE_SIZE_MB: ${RECOGNITION_MAX_FILE_SIZE_MB:-10}
     volumes:
       - medical-data:/data
       - ./apps/server/prisma:/legacy/prisma:ro
       - ./apps/server/uploads:/legacy/uploads:ro
     ports:
       - "${APP_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    networks:
+      - default
+      - recognition-internal
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
 
+  recognition:
+    profiles: [recognition]
+    build:
+      context: .
+      dockerfile: apps/recognition/Dockerfile
+    environment:
+      RECOGNITION_API_KEY: ${RECOGNITION_API_KEY:-}
+      MAX_MEDIA_SIZE_MB: ${RECOGNITION_MAX_FILE_SIZE_MB:-10}
+      MAX_AUDIO_SECONDS: ${RECOGNITION_MAX_AUDIO_SECONDS:-60}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+    volumes:
+      - recognition-models:/models
+    ports:
+      - "127.0.0.1:${RECOGNITION_WORKER_PORT:-8001}:8000"
+    networks:
+      - recognition-internal
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
 volumes:
   medical-data:
+  recognition-models:
+
+networks:
+  default:
+  recognition-internal:

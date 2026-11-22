@@ -36,6 +36,7 @@ import {
 } from '@/api/medications';
 import { deleteFile, readFile, replaceFile, uploadFile } from '@/api/files';
 import { extractErrorMessage } from '@/api/client';
+import { RecognitionInputActions } from '@/components/RecognitionInputActions';
 
 const PREVIEW_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
@@ -89,6 +90,7 @@ export default function VisitDetailPage() {
 
   const [visitEditOpen, setVisitEditOpen] = useState(false);
   const [visitForm] = Form.useForm<VisitFormValues>();
+  const currentNote = Form.useWatch('note', visitForm) ?? '';
   const visitUpdateMutation = useMutation({
     mutationFn: (values: VisitFormValues) => updateVisit(id!, {
       date: values.date.toISOString(),
@@ -111,6 +113,7 @@ export default function VisitDetailPage() {
     { open: false, editing: null },
   );
   const [recordForm] = Form.useForm<RecordFormValues>();
+  const currentDiagnosis = Form.useWatch('diagnosis', recordForm) ?? '';
 
   const recordCreateMutation = useMutation({
     mutationFn: (values: RecordFormValues) => createRecord({ visitId: id!, ...values }),
@@ -389,8 +392,14 @@ export default function VisitDetailPage() {
           <Form.Item label="医生" name="doctor">
             <Input maxLength={200} />
           </Form.Item>
-          <Form.Item label="备注" name="note">
-            <Input.TextArea maxLength={1000} rows={3} />
+          <Form.Item label="备注">
+            <Form.Item name="note" noStyle>
+              <Input.TextArea maxLength={1000} rows={3} />
+            </Form.Item>
+            <RecognitionInputActions
+              currentText={currentNote}
+              onText={(note) => visitForm.setFieldValue('note', note)}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -558,6 +567,10 @@ export default function VisitDetailPage() {
           >
             <Input.TextArea rows={4} />
           </Form.Item>
+          <RecognitionInputActions
+            currentText={currentDiagnosis}
+            onText={(diagnosis) => recordForm.setFieldValue('diagnosis', diagnosis)}
+          />
         </Form>
       </Modal>
 

@@ -27,6 +27,7 @@ import {
   type Visit,
 } from '@/api/visits';
 import { extractErrorMessage } from '@/api/client';
+import { RecognitionInputActions } from '@/components/RecognitionInputActions';
 
 interface VisitFormValues {
   userId: string;
@@ -58,6 +59,7 @@ export default function VisitsPage() {
   const [keywordInput, setKeywordInput] = useState('');
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [form] = Form.useForm<VisitFormValues>();
+  const currentNote = Form.useWatch('note', form) ?? '';
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: listUsers });
 
@@ -288,8 +290,14 @@ export default function VisitsPage() {
           <Form.Item label="医生" name="doctor">
             <Input maxLength={200} />
           </Form.Item>
-          <Form.Item label="备注" name="note">
-            <Input.TextArea rows={3} maxLength={1000} />
+          <Form.Item label="备注">
+            <Form.Item name="note" noStyle>
+              <Input.TextArea rows={3} maxLength={1000} />
+            </Form.Item>
+            <RecognitionInputActions
+              currentText={currentNote}
+              onText={(note) => form.setFieldValue('note', note)}
+            />
           </Form.Item>
         </Form>
       </Modal>

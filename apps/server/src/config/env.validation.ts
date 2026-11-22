@@ -21,6 +21,10 @@ export interface AppEnvironmentVariables {
   LOGIN_MAX_ATTEMPTS: number;
   LOGIN_WINDOW_SECONDS: number;
   LOGIN_LOCKOUT_SECONDS: number;
+  RECOGNITION_WORKER_URL?: string;
+  RECOGNITION_API_KEY?: string;
+  RECOGNITION_TIMEOUT_MS: number;
+  RECOGNITION_MAX_FILE_SIZE_MB: number;
 }
 
 export function validateEnv(
@@ -57,6 +61,13 @@ export function validateEnv(
     LOGIN_MAX_ATTEMPTS: Joi.number().integer().min(1).max(100).default(10),
     LOGIN_WINDOW_SECONDS: Joi.number().integer().min(60).max(86400).default(900),
     LOGIN_LOCKOUT_SECONDS: Joi.number().integer().min(60).max(86400).default(900),
+    RECOGNITION_WORKER_URL: Joi.string().uri({ scheme: ['http', 'https'] }).optional().allow(''),
+    RECOGNITION_API_KEY: Joi.string().optional().allow('').when('RECOGNITION_WORKER_URL', {
+      is: Joi.string().uri({ scheme: ['http', 'https'] }),
+      then: Joi.string().min(32).required(),
+    }),
+    RECOGNITION_TIMEOUT_MS: Joi.number().integer().min(1000).max(300000).default(180000),
+    RECOGNITION_MAX_FILE_SIZE_MB: Joi.number().integer().min(1).max(10).default(10),
   }).unknown(true);
 
   const { error, value } = schema.validate(config, {
@@ -82,6 +93,13 @@ export function validateEnv(
     !value.REGISTRATION_INVITE_CODES
   ) {
     throw new Error('邀请注册模式必须配置 REGISTRATION_INVITE_CODES');
+  }
+
+  if (value.RECOGNITION_WORKER_URL) {
+    const workerHost = new URL(value.RECOGNITION_WORKER_URL).hostname.replace(/^\[|\]$/g, '');
+    if (!['localhost', '127.0.0.1', '::1', 'recognition'].includes(workerHost)) {
+      throw new Error('RECOGNITION_WORKER_URL 只能指向本机或 Docker 内部 recognition 服务，避免媒体发送到外部网络');
+    }
   }
 
   return value;
