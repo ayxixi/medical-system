@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { App as AntdApp, Button, Space, Typography } from 'antd';
+import { Alert, App as AntdApp, Button, Space, Typography } from 'antd';
 import { AudioOutlined, CameraOutlined, StopOutlined } from '@ant-design/icons';
 import { extractErrorMessage } from '@/api/client';
 import { recognizeImage, transcribeAudio } from '@/api/recognition';
 
 interface Props {
-  currentText?: string;
+  getCurrentText: () => string | undefined;
   onText: (text: string) => void;
   disabled?: boolean;
 }
@@ -41,8 +41,9 @@ async function prepareImage(file: File): Promise<File> {
 
 const MAX_RECORDING_MS = 60_000;
 
-export function RecognitionInputActions({ currentText = '', onText, disabled = false }: Props) {
+export function RecognitionInputActions({ getCurrentText, onText, disabled = false }: Props) {
   const { message } = AntdApp.useApp();
+  const [failure, setFailure] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -68,7 +69,7 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
       message.warning('没有识别到文字，请手动输入或换一份媒体。');
       return;
     }
-    const combined = [currentText.trim(), recognized].filter(Boolean).join('\n');
+    const combined = [getCurrentText()?.trim(), recognized].filter(Boolean).join('\n');
     if (combined.length > 1000) {
       message.error('填入后会超过 1000 字限制，请先缩短现有内容或重新识别。');
       return;
@@ -79,6 +80,7 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
 
   const runImage = async (file?: File) => {
     if (!file) return;
+    setFailure(undefined);
     setBusy(true);
     try {
       const prepared = await prepareImage(file).catch((error: unknown) => {
@@ -87,10 +89,9 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
       });
       fillText(await recognizeImage(prepared));
     } catch (error) {
-      message.error(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
+      setFailure(extractErrorMessage(error, '图片识别失败，可继续手动录入。'));
     } finally {
       setBusy(false);
-
     }
   };
 
@@ -109,11 +110,12 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
       message.error('录音超过 10 MB，请缩短后重试。');
       return;
     }
+    setFailure(undefined);
     setBusy(true);
     try {
       fillText(await transcribeAudio(blob));
     } catch (error) {
-      message.error(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
+      setFailure(extractErrorMessage(error, '语音转写失败，可继续手动录入。'));
     } finally {
       setBusy(false);
     }
@@ -204,6 +206,7 @@ export function RecognitionInputActions({ currentText = '', onText, disabled = f
           </Button>
         )}
       </Space>
+      {failure && <Alert type="error" message={failure} showIcon />}
       {busy && <Typography.Text role="status">正在处理媒体并识别，请稍候…</Typography.Text>}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         媒体最长 60 秒、最大 10 MB，仅发送到管理员配置的本机识别服务；结果可编辑，不会自动保存。

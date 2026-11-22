@@ -90,7 +90,6 @@ export default function VisitDetailPage() {
 
   const [visitEditOpen, setVisitEditOpen] = useState(false);
   const [visitForm] = Form.useForm<VisitFormValues>();
-  const currentNote = Form.useWatch('note', visitForm) ?? '';
   const visitUpdateMutation = useMutation({
     mutationFn: (values: VisitFormValues) => updateVisit(id!, {
       date: values.date.toISOString(),
@@ -113,7 +112,6 @@ export default function VisitDetailPage() {
     { open: false, editing: null },
   );
   const [recordForm] = Form.useForm<RecordFormValues>();
-  const currentDiagnosis = Form.useWatch('diagnosis', recordForm) ?? '';
 
   const recordCreateMutation = useMutation({
     mutationFn: (values: RecordFormValues) => createRecord({ visitId: id!, ...values }),
@@ -397,7 +395,7 @@ export default function VisitDetailPage() {
               <Input.TextArea maxLength={1000} rows={3} />
             </Form.Item>
             <RecognitionInputActions
-              currentText={currentNote}
+              getCurrentText={() => visitForm.getFieldValue('note')}
               onText={(note) => visitForm.setFieldValue('note', note)}
             />
           </Form.Item>
@@ -568,7 +566,7 @@ export default function VisitDetailPage() {
             <Input.TextArea rows={4} />
           </Form.Item>
           <RecognitionInputActions
-            currentText={currentDiagnosis}
+            getCurrentText={() => recordForm.getFieldValue('diagnosis')}
             onText={(diagnosis) => recordForm.setFieldValue('diagnosis', diagnosis)}
           />
         </Form>

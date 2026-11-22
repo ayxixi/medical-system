@@ -59,7 +59,6 @@ export default function VisitsPage() {
   const [keywordInput, setKeywordInput] = useState('');
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
   const [form] = Form.useForm<VisitFormValues>();
-  const currentNote = Form.useWatch('note', form) ?? '';
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: listUsers });
 
@@ -296,7 +295,7 @@ export default function VisitsPage() {
               <Input.TextArea rows={3} maxLength={1000} />
             </Form.Item>
             <RecognitionInputActions
-              currentText={currentNote}
+              getCurrentText={() => form.getFieldValue('note')}
               onText={(note) => form.setFieldValue('note', note)}
             />
           </Form.Item>
