@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
-import { unlinkSync } from 'fs';
+import { mkdtempSync, rmSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   BadRequestException,
@@ -9,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { formatValidationErrors } from './common/utils/validation.util';
 import { PrismaService } from './prisma/prisma.service';
@@ -21,6 +21,7 @@ jest.setTimeout(60000);
 
 describe('账号隔离 (e2e)', () => {
   let app: INestApplication;
+  let uploadPath: string;
   let httpServer: ReturnType<INestApplication['getHttpServer']>;
 
   let aliceToken: string;
@@ -39,7 +40,8 @@ describe('账号隔离 (e2e)', () => {
     process.env.JWT_SECRET = 'test-secret-test-secret-test-secret';
     process.env.JWT_EXPIRES_IN = '1d';
     process.env.FILE_STORAGE = 'local';
-    process.env.UPLOAD_PATH = './uploads';
+    uploadPath = mkdtempSync(join(tmpdir(), 'medical-attachments-'));
+    process.env.UPLOAD_PATH = uploadPath;
     process.env.MAX_FILE_SIZE_MB = '10';
 
     execSync('npx prisma db push --force-reset --skip-generate', {
@@ -47,6 +49,7 @@ describe('账号隔离 (e2e)', () => {
       env: process.env,
     });
 
+    const { AppModule } = await import('./app.module');
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -131,6 +134,8 @@ describe('账号隔离 (e2e)', () => {
       await prisma.$disconnect();
       await app.close();
     }
+
+    if (uploadPath) rmSync(uploadPath, { recursive: true, force: true });
 
     try {
       unlinkSync(TEST_DB_PATH);
@@ -254,6 +259,31 @@ describe('账号隔离 (e2e)', () => {
       .get(`/visits/${aliceVisitId}/files`)
       .set('Authorization', `Bearer ${bobToken}`)
       .expect(404);
+  });
+
+  it('附件原件仅对所属账号可读，原件缺失返回 404', async () => {
+    const bytes = Buffer.from('%PDF-1.4 test');
+    const uploaded = await request(httpServer)
+      .post('/files/upload')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .field('visitId', aliceVisitId)
+      .attach('file', bytes, { filename: 'report.pdf', contentType: 'application/pdf' })
+      .expect(201);
+    const url = `/files/${uploaded.body.id}/content`;
+
+    await request(httpServer).get(url).expect(401);
+    await request(httpServer).get(url).set('Authorization', `Bearer ${bobToken}`).expect(404);
+    const result = await request(httpServer)
+      .get(url)
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .expect('Content-Type', 'application/octet-stream')
+      .expect('Cache-Control', 'private, no-store')
+      .expect('Content-Disposition', 'attachment; filename="report.pdf"')
+      .expect(200);
+    expect(result.body).toEqual(bytes);
+
+    unlinkSync(join(uploadPath, uploaded.body.relativePath));
+    await request(httpServer).get(url).set('Authorization', `Bearer ${aliceToken}`).expect(404);
   });
 
   it('账号下至少保留一个用户：删除唯一用户应返回 400', async () => {

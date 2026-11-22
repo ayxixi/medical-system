@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 export type SaveFileInput = {
   buffer: Buffer;
   userId: string;
@@ -13,6 +15,7 @@ export type StoredFileDescriptor = {
 
 export interface FileStorageService {
   save(input: SaveFileInput): Promise<StoredFileDescriptor>;
+  read(relativePath: string): Promise<Readable | null>;
   delete(relativePath: string): Promise<void>;
 }
 

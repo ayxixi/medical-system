@@ -12,6 +12,9 @@ import {
   FileStorageService,
 } from './storage/storage.interface';
 
+import { LocalStorageService } from './storage/local-storage.service';
+import { S3StorageService } from './storage/s3-storage.service';
+
 const ACCEPTED_MIME_TYPES = new Set([
   'application/pdf',
   'image/jpeg',
@@ -33,6 +36,8 @@ export class FileService {
     private readonly configService: ConfigService,
     @Inject(FILE_STORAGE_SERVICE)
     private readonly storageService: FileStorageService,
+    private readonly localStorage: LocalStorageService,
+    private readonly s3Storage: S3StorageService,
   ) {}
 
   async upload(
@@ -89,6 +94,16 @@ export class FileService {
     }
 
     return this.fileRepository.findManyByVisitId(visitId);
+  }
+
+  async read(accountId: string, id: string) {
+    const file = await this.fileRepository.findByIdForAccount(id, accountId);
+    if (!file) throw new NotFoundException('文件不存在');
+
+    const storage = file.storageProvider === 's3' ? this.s3Storage : this.localStorage;
+    const stream = await storage.read(file.relativePath);
+    if (!stream) throw new NotFoundException('附件原件不存在');
+    return { stream, originalName: file.originalName };
   }
 
   async remove(accountId: string, id: string) {

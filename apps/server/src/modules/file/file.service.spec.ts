@@ -59,6 +59,8 @@ describe('FileService', () => {
       fileRepository as unknown as FileRepository,
       { get: getConfig } as unknown as ConfigService,
       storageService as unknown as FileStorageService,
+      {} as ConstructorParameters<typeof FileService>[3],
+      {} as ConstructorParameters<typeof FileService>[4],
     );
   });
 

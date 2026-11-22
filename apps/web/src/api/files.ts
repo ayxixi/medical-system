@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios';
 import { apiClient } from './client';
 import type { VisitFile } from './visits';
 
@@ -23,4 +24,16 @@ export async function replaceFile(id: string, file: File): Promise<VisitFile> {
 
 export async function deleteFile(id: string): Promise<void> {
   await apiClient.delete(`/files/${id}`);
+}
+
+export async function readFile(id: string): Promise<Blob> {
+  try {
+    const { data } = await apiClient.get<Blob>(`/files/${id}/content`, { responseType: 'blob' });
+    return data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 404) {
+      throw new Error('附件原件不存在或已不可访问');
+    }
+    throw error;
+  }
 }

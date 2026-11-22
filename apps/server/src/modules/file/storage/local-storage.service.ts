@@ -29,6 +29,30 @@ export class LocalStorageService implements FileStorageService {
     };
   }
 
+  async read(relativePath: string) {
+    try {
+      const root = await fs.realpath(this.resolveUploadRoot());
+      const candidate = path.resolve(root, relativePath);
+      if (!candidate.startsWith(root + path.sep)) return null;
+      const resolved = await fs.realpath(candidate);
+      if (!resolved.startsWith(root + path.sep)) return null;
+      const handle = await fs.open(resolved, 'r');
+      try {
+        if ((await handle.stat()).isFile()) return handle.createReadStream();
+      } catch (error) {
+        await handle.close();
+        throw error;
+      }
+      await handle.close();
+      return null;
+    } catch (error) {
+      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async delete(relativePath: string): Promise<void> {
     const uploadRoot = this.resolveUploadRoot();
     const normalizedRelative = relativePath.split(/[\\/]/).join(path.sep);

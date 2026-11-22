@@ -6,9 +6,12 @@ import {
   Param,
   Post,
   Put,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   AuthenticatedAccount,
@@ -44,6 +47,20 @@ export class FileController {
     @Param('visitId') visitId: string,
   ) {
     return this.fileService.findManyByVisitId(account.id, visitId);
+  }
+
+  @Get('files/:id/content')
+  async read(
+    @CurrentAccount() account: AuthenticatedAccount,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { stream, originalName } = await this.fileService.read(account.id, id);
+    response.attachment(originalName);
+    response.setHeader('Content-Type', 'application/octet-stream');
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return new StreamableFile(stream);
   }
 
   @Put('files/:id')
