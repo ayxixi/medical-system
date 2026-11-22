@@ -22,6 +22,9 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   const configService = app.get(ConfigService);
+  if (configService.get<string>('TRUST_PROXY') === 'true') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
   const port = configService.get<number>('PORT', 3000);
 
   const host = configService.get<string>('BIND_HOST', '0.0.0.0');

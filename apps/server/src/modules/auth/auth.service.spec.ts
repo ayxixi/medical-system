@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -9,7 +10,13 @@ describe('AuthService', () => {
   let authRepository: {
     findAccountByEmail: jest.Mock;
     createAccountWithFirstUser: jest.Mock;
+    findLoginAttempt: jest.Mock;
+    saveLoginAttempt: jest.Mock;
+    clearLoginAttempt: jest.Mock;
+    findAccountByIdWithCredentials: jest.Mock;
+    changePassword: jest.Mock;
   };
+  let configValues: Record<string, unknown>;
   let jwtService: {
     sign: jest.Mock;
   };
@@ -18,8 +25,14 @@ describe('AuthService', () => {
     authRepository = {
       findAccountByEmail: jest.fn(),
       createAccountWithFirstUser: jest.fn(),
+      findLoginAttempt: jest.fn().mockResolvedValue(null),
+      saveLoginAttempt: jest.fn(),
+      clearLoginAttempt: jest.fn(),
+      findAccountByIdWithCredentials: jest.fn(),
+      changePassword: jest.fn(),
     };
 
+    configValues = {};
     jwtService = {
       sign: jest.fn().mockReturnValue('signed-token'),
     };
@@ -27,6 +40,7 @@ describe('AuthService', () => {
     service = new AuthService(
       authRepository as unknown as AuthRepository,
       jwtService as unknown as JwtService,
+      { get: (key: string, fallback?: unknown) => configValues[key] ?? (key === 'LOGIN_MAX_ATTEMPTS' ? 3 : fallback) } as unknown as ConfigService,
     );
   });
 
@@ -54,6 +68,7 @@ describe('AuthService', () => {
     authRepository.createAccountWithFirstUser.mockResolvedValue({
       id: 'account-1',
       email: 'alice@example.com',
+      tokenVersion: 0,
       users: [{ id: 'user-1', name: 'Alice' }],
     });
 
@@ -72,6 +87,7 @@ describe('AuthService', () => {
     expect(jwtService.sign).toHaveBeenCalledWith({
       sub: 'account-1',
       email: 'alice@example.com',
+      ver: 0,
     });
     expect(result).toEqual({
       accessToken: 'signed-token',
@@ -87,7 +103,7 @@ describe('AuthService', () => {
       service.login({
         email: 'alice@example.com',
         password: 'wrong-password',
-      }),
+      }, 'client-1'),
     ).rejects.toThrow(UnauthorizedException);
 
     expect(jwtService.sign).not.toHaveBeenCalled();
@@ -98,6 +114,7 @@ describe('AuthService', () => {
       id: 'account-1',
       email: 'alice@example.com',
       passwordHash: 'hashed-password',
+      tokenVersion: 0,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
 
@@ -105,7 +122,7 @@ describe('AuthService', () => {
       service.login({
         email: 'alice@example.com',
         password: 'wrong-password',
-      }),
+      }, 'client-1'),
     ).rejects.toThrow('邮箱或密码错误');
 
     expect(jwtService.sign).not.toHaveBeenCalled();
@@ -116,13 +133,14 @@ describe('AuthService', () => {
       id: 'account-1',
       email: 'alice@example.com',
       passwordHash: 'hashed-password',
+      tokenVersion: 0,
     });
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
     const result = await service.login({
       email: 'alice@example.com',
       password: 'hunter2hunter2',
-    });
+    }, 'client-1');
 
     expect(bcrypt.compare).toHaveBeenCalledWith(
       'hunter2hunter2',
@@ -131,6 +149,7 @@ describe('AuthService', () => {
     expect(jwtService.sign).toHaveBeenCalledWith({
       sub: 'account-1',
       email: 'alice@example.com',
+      ver: 0,
     });
     expect(result).toEqual({
       accessToken: 'signed-token',

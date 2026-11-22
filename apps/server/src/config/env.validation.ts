@@ -15,6 +15,12 @@ export interface AppEnvironmentVariables {
   S3_FORCE_PATH_STYLE?: 'true' | 'false';
   JWT_SECRET: string;
   JWT_EXPIRES_IN: string;
+  TRUST_PROXY: 'true' | 'false';
+  REGISTRATION_MODE: 'open' | 'invite';
+  REGISTRATION_INVITE_CODES?: string;
+  LOGIN_MAX_ATTEMPTS: number;
+  LOGIN_WINDOW_SECONDS: number;
+  LOGIN_LOCKOUT_SECONDS: number;
 }
 
 export function validateEnv(
@@ -45,6 +51,12 @@ export function validateEnv(
     S3_FORCE_PATH_STYLE: Joi.string().valid('true', 'false').optional(),
     JWT_SECRET: Joi.string().min(16).required(),
     JWT_EXPIRES_IN: Joi.string().default('1d'),
+    TRUST_PROXY: Joi.string().valid('true', 'false').default('false'),
+    REGISTRATION_MODE: Joi.string().valid('open', 'invite').optional(),
+    REGISTRATION_INVITE_CODES: Joi.string().optional().allow(''),
+    LOGIN_MAX_ATTEMPTS: Joi.number().integer().min(1).max(100).default(10),
+    LOGIN_WINDOW_SECONDS: Joi.number().integer().min(60).max(86400).default(900),
+    LOGIN_LOCKOUT_SECONDS: Joi.number().integer().min(60).max(86400).default(900),
   }).unknown(true);
 
   const { error, value } = schema.validate(config, {
@@ -58,6 +70,18 @@ export function validateEnv(
       .join('；');
 
     throw new Error(`环境变量校验失败：${message}`);
+  }
+
+  if (!config.REGISTRATION_MODE || config.REGISTRATION_MODE === '') {
+    value.REGISTRATION_MODE = value.NODE_ENV === 'production' ? 'invite' : 'open';
+  }
+
+  if (
+    value.NODE_ENV === 'production' &&
+    value.REGISTRATION_MODE === 'invite' &&
+    !value.REGISTRATION_INVITE_CODES
+  ) {
+    throw new Error('邀请注册模式必须配置 REGISTRATION_INVITE_CODES');
   }
 
   return value;

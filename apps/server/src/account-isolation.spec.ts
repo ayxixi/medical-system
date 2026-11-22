@@ -45,6 +45,10 @@ describe('账号隔离 (e2e)', () => {
     uploadPath = join(testRoot, 'uploads');
     process.env.UPLOAD_PATH = uploadPath;
     process.env.MAX_FILE_SIZE_MB = '10';
+    process.env.REGISTRATION_MODE = 'open';
+    process.env.LOGIN_MAX_ATTEMPTS = '3';
+    process.env.LOGIN_WINDOW_SECONDS = '900';
+    process.env.LOGIN_LOCKOUT_SECONDS = '900';
 
     execSync('npm run prisma:migrate:deploy', {
       stdio: 'pipe',
@@ -138,6 +142,67 @@ describe('账号隔离 (e2e)', () => {
     }
 
     if (testRoot) rmSync(testRoot, { recursive: true, force: true });
+  });
+
+  it('密码修改使已有访问令牌失效，新密码可登录并重置成功失败计数', async () => {
+    const login = () => request(httpServer).post('/auth/login').send({
+      email: 'alice@example.com', password: 'hunter2hunter2',
+    });
+    await login().expect(200);
+
+    await request(httpServer).post('/auth/change-password')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ currentPassword: 'hunter2hunter2', newPassword: 'new-password-123' })
+      .expect(201);
+
+    await request(httpServer).get('/auth/me')
+      .set('Authorization', `Bearer ${aliceToken}`).expect(401);
+
+    const renewed = await request(httpServer).post('/auth/login').send({
+      email: 'alice@example.com', password: 'new-password-123',
+    }).expect(200);
+    await request(httpServer).get('/auth/me')
+      .set('Authorization', `Bearer ${renewed.body.accessToken}`).expect(200);
+    aliceToken = renewed.body.accessToken;
+  });
+
+  it('登录失败达到上限后返回 429，成功后清除失败计数', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      await request(httpServer).post('/auth/login').send({
+        email: 'bob@example.com', password: 'incorrect-password',
+      }).expect(401);
+    }
+    await request(httpServer).post('/auth/login').send({
+      email: 'bob@example.com', password: 'hunter2hunter2',
+    }).expect(429);
+
+    const prisma = app.get(PrismaService);
+    const attempt = await prisma.loginAttempt.findFirstOrThrow();
+    await prisma.loginAttempt.delete({ where: { key: attempt.key } });
+    await request(httpServer).post('/auth/login').send({
+      email: 'bob@example.com', password: 'hunter2hunter2',
+    }).expect(200);
+  });
+
+  it('生产邀请注册要求有效邀请码', async () => {
+    process.env.REGISTRATION_MODE = 'invite';
+    process.env.REGISTRATION_INVITE_CODES = 'beta-2026';
+    const config = app.get(require('@nestjs/config').ConfigService);
+    jest.spyOn(config, 'get').mockImplementation((key: unknown, fallback?: unknown) =>
+      key === 'REGISTRATION_MODE' ? 'invite'
+        : key === 'REGISTRATION_INVITE_CODES' ? 'beta-2026' : fallback,
+    );
+    try {
+      await request(httpServer).post('/auth/register').send({
+        email: 'invite-denied@example.com', password: 'password-123', name: 'No Code',
+      }).expect(403);
+      await request(httpServer).post('/auth/register').send({
+        email: 'invite-accepted@example.com', password: 'password-123',
+        name: 'Invite', inviteCode: 'beta-2026',
+      }).expect(201);
+    } finally {
+      jest.restoreAllMocks();
+    }
   });
 
   it('未携带 token 时拒绝访问受保护接口', async () => {
