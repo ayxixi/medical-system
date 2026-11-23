@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Button, Card, Form, Input, Typography, App as AntdApp } from 'antd';
+import { App as AntdApp, Button, Form, Input } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { register, type RegisterPayload } from '@/api/auth';
 import { extractErrorMessage } from '@/api/client';
+import { AuthShell } from '@/components/AuthShell';
 import { useAuthStore } from '@/store/auth';
 
 export default function RegisterPage() {
@@ -26,71 +27,55 @@ export default function RegisterPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
+    <AuthShell
+      title="注册"
+      description="先设置账号信息，再开始记录家人的就诊资料。"
+      footer={<>已经注册过？ <Link to="/login">返回登录</Link></>}
     >
-      <Card style={{ width: 380, maxWidth: "calc(100% - 24px)" }}>
-        <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
-          注册
-        </Typography.Title>
-        <Form layout="vertical" onFinish={onFinish} autoComplete="on">
-          <Form.Item
-            label="用户名"
-            name="username"
-            rules={[
-              { required: true, message: '请设置用户名' },
-              { min: 3, max: 32, message: '用户名长度为 3 至 32 位' },
-              { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, message: '以字母或数字开头，只能包含字母、数字、点、下划线和连字符' },
-            ]}
-          >
-            <Input placeholder="用于登录，例如 litao" autoComplete="username" />
-          </Form.Item>
-          <Form.Item
-            label="姓名"
-            name="name"
-            rules={[
-              { required: true, message: '请输入姓名' },
-              { max: 100, message: '姓名长度不能超过 100' },
-            ]}
-          >
-            <Input placeholder="第一个家庭成员的姓名" autoComplete="name" />
-          </Form.Item>
-          <Form.Item
-            label="邮箱"
-            name="email"
-            rules={[
-              { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '邮箱格式不正确' },
-            ]}
-          >
-            <Input placeholder="you@example.com" autoComplete="email" />
-          </Form.Item>
-          <Form.Item
-            label="密码"
-            name="password"
-            rules={[
-              { required: true, message: '请输入密码' },
-              { min: 8, message: '密码至少 8 位' },
-            ]}
-          >
-            <Input.Password placeholder="至少 8 位" autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block loading={submitting}>
-              注册
-            </Button>
-          </Form.Item>
-          <Typography.Paragraph style={{ textAlign: 'center', margin: 0 }}>
-            已有账号？ <Link to="/login">直接登录</Link>
-          </Typography.Paragraph>
-        </Form>
-      </Card>
-    </div>
+      <Form layout="vertical" onFinish={onFinish} autoComplete="on" requiredMark={false}>
+        <Form.Item
+          label="登录用户名"
+          name="username"
+          rules={[
+            { required: true, message: '请设置用户名' },
+            { min: 3, max: 32, message: '用户名长度为 3 至 32 位' },
+            { pattern: /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, message: '以字母或数字开头，可使用点、下划线和连字符' },
+          ]}
+        >
+          <Input size="large" placeholder="用于登录，例如 litao" autoComplete="username" />
+        </Form.Item>
+        <Form.Item
+          label="首位家庭成员姓名"
+          name="name"
+          rules={[{ required: true, message: '请输入姓名' }, { max: 100, message: '姓名长度不能超过 100' }]}
+        >
+          <Input size="large" placeholder="例如：张三" autoComplete="name" />
+        </Form.Item>
+        <Form.Item
+          label="邮箱"
+          name="email"
+          rules={[{ required: true, message: '请输入邮箱' }, { type: 'email', message: '邮箱格式不正确' }]}
+        >
+          <Input size="large" placeholder="用于账号联系和找回" autoComplete="email" />
+        </Form.Item>
+        <Form.Item
+          label="密码"
+          name="password"
+          rules={[{ required: true, message: '请输入密码' }, { min: 8, message: '密码至少 8 位' }]}
+        >
+          <Input.Password size="large" placeholder="至少 8 位" autoComplete="new-password" />
+        </Form.Item>
+        <Form.Item
+          label="邀请码"
+          name="inviteCode"
+          extra="如果部署管理员启用了邀请注册，请填写管理员提供的邀请码；本地开放注册时可留空。"
+        >
+          <Input size="large" placeholder="如有邀请码，请输入" autoComplete="off" />
+        </Form.Item>
+        <Button type="primary" htmlType="submit" size="large" block loading={submitting}>
+          创建账号
+        </Button>
+      </Form>
+    </AuthShell>
   );
 }

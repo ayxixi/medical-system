@@ -211,8 +211,9 @@ export function RecognitionInputActions({ getCurrentText, onText, disabled = fal
   };
 
   return (
-    <Space direction="vertical" size={4} style={{ width: '100%', marginTop: 8 }}>
-      <Space wrap>
+    <Space direction="vertical" size={8} className="recognition-actions">
+      <Typography.Text strong>拍照、选图或语音录入</Typography.Text>
+      <Space wrap className="recognition-actions-main">
         <input ref={imageInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(event) => selectImage(event, 'album')} />
         <input ref={cameraInput} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(event) => selectImage(event, 'camera')} />
         <Button
