@@ -35,14 +35,15 @@ model AuditLog {
 }
 
 model User {
-  id         String      @id @default(cuid())
+  id         String           @id @default(cuid())
   accountId  String
   name       String
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  account    Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  account    Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   visits     Visit[]
   healthLogs HealthLog[]
+  reminders  HealthReminder[]
 
   @@index([accountId])
 }
@@ -82,6 +83,26 @@ model HealthLog {
 
   @@index([userId, occurredAt])
   @@index([userId, type, occurredAt])
+}
+
+model HealthReminder {
+  id           String    @id @default(cuid())
+  userId       String
+  kind         String
+  title        String
+  note         String?
+  nextAt       DateTime
+  localTime    String?
+  timeZone     String
+  repeatDaily  Boolean   @default(false)
+  snoozedUntil DateTime?
+  isActive     Boolean   @default(true)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive, nextAt])
 }
 
 model DiagnosisRecord {

@@ -104,6 +104,7 @@ sequenceDiagram
 - `apps/server/src/modules/user/`：家庭成员管理。
 - `apps/server/src/modules/visit/`：就诊记录管理。
 - `apps/server/src/modules/health-log/`：家庭成员日常病程记录及体温/服药/症状事件。
+- `apps/server/src/modules/health-reminder/`：家庭成员体温、服药与自定义提醒。
 - `apps/server/src/modules/record/`：诊断记录管理。
 - `apps/server/src/modules/medication/`：用药记录管理。
 - `apps/server/src/modules/file/`：附件上传、替换、删除与存储实现。
@@ -145,6 +146,7 @@ sequenceDiagram
 | `user` | `user.controller.ts` -> `user.service.ts` -> `user.repository.ts` -> `dto/` | 家庭成员 CRUD 与最少保留一个成员约束 |
 | `visit` | `visit.controller.ts` -> `visit.service.ts` -> `visit.repository.ts` -> `dto/` | 就诊主聚合、筛选、分页、排序 |
 | `health-log` | `health-log.controller.ts` -> `health-log.service.ts` -> `health-log.repository.ts` -> `dto/` | 体温、实际服药、症状与日常病程时间线 |
+| `health-reminder` | `health-reminder.controller.ts` -> `health-reminder.service.ts` -> `health-reminder.repository.ts` -> `dto/` | 成员提醒的创建、管理、完成与稍后处理 |
 | `record` | `record.controller.ts` -> `record.service.ts` -> `record.repository.ts` -> `dto/` | 诊断记录读写与账号边界 |
 | `medication` | `medication.controller.ts` -> `medication.service.ts` -> `medication.repository.ts` -> `dto/` | 用药记录读写与账号边界 |
 | `file` | `file.controller.ts` -> `file.service.ts` -> `file.repository.ts` -> `storage/` -> `dto/` | 附件上传、替换、删除与存储切换 |
@@ -167,6 +169,7 @@ sequenceDiagram
 | 就诊列表 | `src/pages/visits/VisitsPage.tsx` -> `src/api/visits.ts` | 就诊搜索、筛选、排序、分页 |
 | 就诊详情 | `src/pages/visits/VisitDetailPage.tsx` -> `src/api/records.ts` / `medications.ts` / `files.ts` | 诊断、用药、附件的聚合操作 |
 | 病程记录 | `src/pages/health-logs/HealthLogsPage.tsx` -> `src/api/healthLogs.ts` | 快速记录、体温趋势、成员时间线 |
+| 病程提醒 | `src/pages/health-logs/HealthLogsPage.tsx` -> `src/api/healthReminders.ts` | 提醒管理、到期提示、跳转体温/服药录入 |
 
 对新成员来说，最短的理解路径通常是：
 
@@ -232,6 +235,7 @@ sequenceDiagram
 - `Account` 直接拥有多个 `User`
 - `Visit` 通过 `userId` 间接归属到某个 `Account`
 - `HealthLog` 通过 `userId` 间接归属到某个 `Account`
+- `HealthReminder` 通过 `userId` 间接归属到某个 `Account`
 - `DiagnosisRecord`、`Medication`、`VisitFile` 再通过 `visitId` 间接归属到某个 `Account`
 
 因此仓储层查询通常需要使用关系条件，而不是只按主键命中。
@@ -280,6 +284,7 @@ flowchart TD
   App --> User[UserModule]
   App --> Visit[VisitModule]
   App --> HealthLog[HealthLogModule]
+  App --> HealthReminder[HealthReminderModule]
   App --> Record[RecordModule]
   App --> Medication[MedicationModule]
   App --> File[FileModule]
@@ -288,6 +293,7 @@ flowchart TD
   User --> Prisma
   Visit --> Prisma
   HealthLog --> Prisma
+  HealthReminder --> Prisma
   Record --> Prisma
   Medication --> Prisma
   File --> Prisma
@@ -397,6 +403,7 @@ flowchart TD
 | `/visits` | `src/api/users.ts#listUsers`、`src/api/visits.ts#listVisits`、`createVisit`、`deleteVisit` | `GET /users`、`GET/POST/DELETE /visits` | 就诊筛选、列表、新增、删除 |
 | `/visits/:id` | `src/api/visits.ts#getVisit`、`src/api/records.ts`、`src/api/medications.ts`、`src/api/files.ts` | `GET /visits/:id`、`/records`、`/medications`、`/files` 相关接口 | 就诊详情、诊断/用药/附件聚合操作 |
 | `/health-logs` | `src/api/healthLogs.ts` | `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | 快捷记录、体温趋势、成员时间线 |
+| `/health-reminders` | `src/api/healthReminders.ts` | `GET/POST /health-reminders`、`PATCH/DELETE /health-reminders/:id`、`POST /:id/action` | 管理与处理成员提醒 |
 
 从页面角度看，API 依赖呈现为“认证域、成员域、就诊域、就诊子资源域”四层逐步展开。
 
@@ -415,6 +422,7 @@ flowchart LR
   VisitDetail --> MedicationsApi[medications.ts]
   VisitDetail --> FilesApi[files.ts]
   HealthLogs[HealthLogsPage] --> HealthLogsApi[healthLogs.ts]
+  HealthLogs --> HealthRemindersApi[healthReminders.ts]
 ```
 
 ### 6.7 页面 -> API -> 后端模块 -> 数据模型 映射表
@@ -433,6 +441,7 @@ flowchart LR
 | `VisitDetailPage` 用药区块 | `src/api/medications.ts#createMedication`、`updateMedication`、`deleteMedication` | `medication.controller.ts` -> `POST/PATCH/DELETE /medications...`、`GET /visits/:visitId/medications` | `Medication`、`Visit` |
 | `VisitDetailPage` 附件区块 | `src/api/files.ts#uploadFile`、`replaceFile`、`deleteFile` | `file.controller.ts` -> `POST /files/upload`、`PUT /files/:id`、`DELETE /files/:id`、`GET /visits/:visitId/files` | `VisitFile`、`Visit` |
 | `HealthLogsPage` `/health-logs` | `src/api/healthLogs.ts` 的列表、新建、更新、删除 | `health-log.controller.ts` -> `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | `HealthLog`、`User` |
+| `HealthLogsPage` 提醒区 | `src/api/healthReminders.ts` 的列表、创建、更新、动作、删除 | `health-reminder.controller.ts` -> `/health-reminders` CRUD 与 action | `HealthReminder`、`User` |
 
 如果从工程主线来理解，这张表可以再压缩成下面这条链路：
 
@@ -448,6 +457,8 @@ flowchart LR
 
 日常病程记录从成员直接关联，与就诊主记录分开保存：`Account -> User -> HealthLog`。
 
+提醒也与正式就诊分离，按成员关联：`Account -> User -> HealthReminder`。
+
 含义如下：
 
 - `Account`：可登录账号。
@@ -457,12 +468,14 @@ flowchart LR
 - `Medication`：用药记录。
 - `VisitFile`：附件记录。
 - `HealthLog`：成员按时间记录的体温、实际服药、症状及日常情况。
+- `HealthReminder`：成员按本地日历时间设置的单次或每日重复提醒。
 
 ```mermaid
 erDiagram
   Account ||--o{ User : owns
   User ||--o{ Visit : has
   User ||--o{ HealthLog : has
+  User ||--o{ HealthReminder : has
   Visit ||--o{ DiagnosisRecord : contains
   Visit ||--o{ Medication : contains
   Visit ||--o{ VisitFile : contains
@@ -471,17 +484,18 @@ erDiagram
 该模型体现了两个关键事实：
 
 - 登录账号与家庭成员是分开的两个概念。
-- `Visit` 子资源围绕就诊聚合；`HealthLog` 是成员下独立的病程时间线，不依附某次就诊。
+- `Visit` 子资源围绕就诊聚合；`HealthLog` 和 `HealthReminder` 是成员下独立的日常病程数据，不依附某次就诊。
 
 ## 7.1 接口域地图
 
-后端接口按领域可划分为 7 个域，每个域在前端也有对应的 API 封装模块。
+后端接口按领域可划分为 8 个域，每个域在前端也有对应的 API 封装模块。
 
 | 接口域 | 前端 API 模块 | 典型后端接口 | 主要职责 |
 | --- | --- | --- | --- |
 | 认证域 | `src/api/auth.ts` | `POST /auth/register`、`POST /auth/login`、`GET /auth/me` | 建立与恢复登录会话 |
 | 成员域 | `src/api/users.ts` | `POST /users`、`GET /users`、`PATCH /users/:id`、`DELETE /users/:id` | 维护账号下家庭成员 |
 | 日常病程域 | `src/api/healthLogs.ts` | `POST/GET /health-logs`、`PATCH/DELETE /health-logs/:id` | 维护成员按时间记录的体温、服药和症状 |
+| 病程提醒域 | `src/api/healthReminders.ts` | `/health-reminders` CRUD 与 action | 维护成员体温、服药及自定义提醒 |
 | 就诊主域 | `src/api/visits.ts` | `POST /visits`、`GET /visits`、`GET /visits/:id`、`PATCH /visits/:id`、`DELETE /visits/:id` | 管理就诊主记录与筛选聚合 |
 | 诊断子资源域 | `src/api/records.ts` | `POST /records`、`GET /visits/:visitId/records`、`PATCH /records/:id`、`DELETE /records/:id` | 管理就诊下的诊断记录 |
 | 用药子资源域 | `src/api/medications.ts` | `POST /medications`、`GET /visits/:visitId/medications`、`PATCH /medications/:id`、`DELETE /medications/:id` | 管理就诊下的用药记录 |
@@ -494,6 +508,7 @@ flowchart TD
   Auth[认证域 /auth]
   Users[成员域 /users]
   HealthLogs[日常病程域 /health-logs]
+  HealthReminders[病程提醒域 /health-reminders]
   Visits[就诊主域 /visits]
   Records[诊断子资源域 /records]
   Medications[用药子资源域 /medications]
@@ -502,6 +517,7 @@ flowchart TD
   Auth --> Users
   Users --> Visits
   Users --> HealthLogs
+  Users --> HealthReminders
   Visits --> Records
   Visits --> Medications
   Visits --> Files

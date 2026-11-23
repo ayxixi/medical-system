@@ -40,6 +40,8 @@ import {
 } from '@/api/healthLogs';
 import { listUsers } from '@/api/users';
 import { extractErrorMessage } from '@/api/client';
+import { actOnHealthReminder } from '@/api/healthReminders';
+import { HealthRemindersPanel } from './HealthRemindersPanel';
 
 interface HealthLogFormValues {
   occurredAt: Dayjs;
@@ -53,6 +55,7 @@ interface HealthLogFormValues {
 interface EditorState {
   type: HealthLogType;
   record?: HealthLog;
+  reminderId?: string;
 }
 
 const rangeOptions = [
@@ -183,11 +186,21 @@ export default function HealthLogsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (payload: HealthLogPayload) => {
-      if (editor?.record) return updateHealthLog(editor.record.id, payload);
-      return createHealthLog(payload);
+      const savedLog = editor?.record
+        ? await updateHealthLog(editor.record.id, payload)
+        : await createHealthLog(payload);
+      if (editor?.reminderId && !editor.record) {
+        try {
+          await actOnHealthReminder(editor.reminderId, 'complete');
+        } catch {
+          message.warning('记录已保存，但提醒未能完成；请在提醒列表中手动处理。');
+        }
+      }
+      return savedLog;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['health-logs', selectedUserId] });
+      await queryClient.invalidateQueries({ queryKey: ['health-reminders', selectedUserId] });
       message.success(editor?.record ? '记录已更新' : '记录已保存');
       closeEditor();
     },
@@ -207,10 +220,10 @@ export default function HealthLogsPage() {
     },
   });
 
-  const openCreate = (type: HealthLogType) => {
+  const openCreate = (type: HealthLogType, reminderId?: string) => {
     form.resetFields();
     form.setFieldsValue({ occurredAt: dayjs(), symptoms: [] });
-    setEditor({ type });
+    setEditor({ type, reminderId });
   };
 
   const openEdit = (record: HealthLog) => {
@@ -306,6 +319,11 @@ export default function HealthLogsPage() {
           <HeartOutlined /><span>记症状</span><small>记录身体感受</small>
         </Button>
       </div>
+
+      <HealthRemindersPanel
+        userId={selectedUserId}
+        onRecord={(kind, reminderId) => openCreate(kind, reminderId)}
+      />
 
       <TemperatureTrend logs={trendLogs} />
 
