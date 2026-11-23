@@ -75,29 +75,29 @@ function nextDailyOccurrence(localTime: string, timeZone: string, after: Date): 
       candidate += difference;
     }
 
-    let occurrence = new Date(candidate);
-    let actual = zonedParts(occurrence, timeZone);
-    // If a daylight-saving transition skips this local time, use the first
-    // valid minute after it on the same local calendar day.
-    if (
-      actual.year === target.year && actual.month === target.month && actual.day === target.day &&
-      (actual.hour < hour || (actual.hour === hour && actual.minute < minute))
-    ) {
-      const limit = candidate + 180 * 60_000;
-      while (candidate < limit) {
-        candidate += 60_000;
-        actual = zonedParts(new Date(candidate), timeZone);
-        if (
-          actual.year !== target.year || actual.month !== target.month || actual.day !== target.day
-        ) break;
-        if (actual.hour > hour || (actual.hour === hour && actual.minute >= minute)) {
-          occurrence = new Date(candidate);
-          break;
-        }
+    const occurrence = new Date(candidate);
+    const actual = zonedParts(occurrence, timeZone);
+    const sameTargetDate = actual.year === target.year && actual.month === target.month && actual.day === target.day;
+    const exactLocalTime = sameTargetDate && actual.hour === hour && actual.minute === minute;
+    if (exactLocalTime && occurrence.getTime() > after.getTime()) return occurrence;
+
+    // When DST skips a wall-clock time, the offset iteration may settle on a
+    // later minute (for example 03:30 for a requested 02:30). Search around
+    // that estimate for the first valid minute >= the requested local time.
+    // This also handles the second copy of an ambiguous fall-back time.
+    const searchStart = candidate - 180 * 60_000;
+    const searchEnd = candidate + 180 * 60_000;
+    for (let instant = searchStart; instant <= searchEnd; instant += 60_000) {
+      if (instant <= after.getTime()) continue;
+      const local = zonedParts(new Date(instant), timeZone);
+      if (local.year !== target.year || local.month !== target.month || local.day !== target.day) continue;
+      const matchesRequestedTime = exactLocalTime
+        ? local.hour === hour && local.minute === minute
+        : local.hour > hour || (local.hour === hour && local.minute >= minute);
+      if (matchesRequestedTime) {
+        return new Date(instant);
       }
     }
-
-    if (occurrence.getTime() > after.getTime()) return occurrence;
   }
 
   throw new BadRequestException('无法计算下一次每日提醒时间');

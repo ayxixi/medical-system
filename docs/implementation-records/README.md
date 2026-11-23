@@ -35,3 +35,4 @@
 - [Issue #60：浅色/深色主题切换](./issue-60/README.md)
 - [Issue #62：西西记录与日常病程](./issue-62/README.md)
 - [Issue #66：西西记录体温与服药提醒](./issue-66/README.md)
+- [Issue #68：病程提醒边界验证](./issue-68/README.md)
