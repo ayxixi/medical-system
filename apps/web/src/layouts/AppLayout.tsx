@@ -51,7 +51,7 @@ export default function AppLayout() {
         >
           <div className="app-brand">
             <span className="app-brand-mark"><MedicineBoxOutlined /></span>
-            {!collapsed && <span className="app-brand-name">安心病历</span>}
+            {!collapsed && <span className="app-brand-name">电子病历</span>}
           </div>
           <div className="app-nav-caption">工作空间</div>
           <nav aria-label="主导航">
@@ -83,7 +83,7 @@ export default function AppLayout() {
         <Header className="app-header">
           <div className="mobile-wordmark">
             <span className="app-brand-mark"><MedicineBoxOutlined /></span>
-            <span>安心病历</span>
+            <span>电子病历</span>
           </div>
           <div className="header-spacer" />
           <ThemeToggle className="header-theme-toggle" />
