@@ -2,4 +2,8 @@
 
 状态：待评审
 
-待创建 PR 后补录评审与合并结论。当前功能分支基于主题切换 PR #61；先合并该主题 PR 后再合并本功能 PR，或在评审前将其 rebase 到 master。
+PR：[ #63 西西记录：日常病程](https://github.com/ayxixi/medical-system/pull/63)
+
+当前 PR base 为 `codex/issue-60-theme-toggle`，依赖主题切换 PR #61。请先合并 #61，再将本 PR base 改为 `master` 后合并；届时 GitHub 的 mergeable 状态会随 base 更新重新计算。
+
+待评审后补录评审结论；合并与发布结果在实际发生后更新。
