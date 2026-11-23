@@ -319,6 +319,8 @@ textarea { font: inherit; }
 }
 
 @media (max-width: 420px) {
+  .app-header { gap: 8px; padding-right: 12px; padding-left: 12px; }
+  .account-menu-button .account-name { display: none; }
   .page-heading { flex-wrap: wrap; }
   .page-heading-actions { width: 100%; justify-content: flex-start; }
   .visit-meta-grid { grid-template-columns: minmax(0, 1fr); }
@@ -329,3 +331,101 @@ textarea { font: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --brand: #61cbbb;
+  --brand-dark: #72d7c8;
+  --brand-soft: #1e3938;
+  --ink: #e3eeee;
+  --muted: #9aabab;
+  --line: #344344;
+  --canvas: #111a1b;
+  --surface: #1b2728;
+  --radius-card: 16px;
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .app-layout,
+:root[data-theme='dark'] .app-main-layout,
+:root[data-theme='dark'] .app-content {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+:root[data-theme='dark'] .app-header {
+  border-bottom-color: #2b393a;
+  background: rgba(27, 39, 40, 0.94);
+}
+
+:root[data-theme='dark'] .app-sider { background: #102a2b !important; }
+:root[data-theme='dark'] .app-nav-item.is-active { background: #244543; color: #a8e7dc; }
+:root[data-theme='dark'] .account-menu-button:hover { background: #293738 !important; }
+:root[data-theme='dark'] .account-name { color: #d4e2e2; }
+:root[data-theme='dark'] .page-section-title .ant-tag { background: #293838; color: #b4c6c4; }
+:root[data-theme='dark'] .ant-card { background: #1b2728; }
+:root[data-theme='dark'] .ant-card .ant-card-head { border-bottom-color: #2b393a; }
+:root[data-theme='dark'] .ant-form-item-label > label { color: #c3d0d0; }
+
+:root[data-theme='dark'] .home-welcome {
+  border-color: #34504d;
+  background: linear-gradient(115deg, #1d3533 0%, #1b2b2b 62%, #1b2728 100%);
+}
+:root[data-theme='dark'] .home-welcome h2 { color: #e1f1ef; }
+:root[data-theme='dark'] .home-welcome p { color: #a4bfba; }
+:root[data-theme='dark'] .recent-visit-row { border-bottom-color: #2b393a; }
+:root[data-theme='dark'] .recent-visit-main strong { color: #d6e3e3; }
+:root[data-theme='dark'] .member-avatar { background: linear-gradient(135deg, #29423f, #233332); color: #8be0d0; }
+:root[data-theme='dark'] .member-card-name { color: var(--ink); }
+
+:root[data-theme='dark'] .visit-table-card .ant-table-thead > tr > th { color: #adbfbe; }
+:root[data-theme='dark'] .visit-place { color: #d9e6e5; }
+:root[data-theme='dark'] .visit-counts .ant-tag { background: #2a3838; color: #b5c8c6; }
+:root[data-theme='dark'] .visit-mobile-actions { border-top-color: #2b393a; }
+:root[data-theme='dark'] .visit-summary-card {
+  border-color: #344746;
+  background: linear-gradient(140deg, #1b2728 0%, #1d2d2d 100%);
+}
+:root[data-theme='dark'] .visit-summary-title h2 { color: #e1eeee; }
+:root[data-theme='dark'] .visit-summary-date { background: #263c39; color: #a4e1d5; }
+:root[data-theme='dark'] .visit-meta-item { border-color: #344141; background: rgba(31, 44, 45, 0.82); }
+:root[data-theme='dark'] .visit-meta-label { color: #9aaead; }
+:root[data-theme='dark'] .visit-meta-value { color: #d1dfde; }
+:root[data-theme='dark'] .visit-note { border-left-color: #4b9c8f; background: #223332; }
+:root[data-theme='dark'] .visit-note-label { color: #a2c7c1; }
+:root[data-theme='dark'] .visit-note-content,
+:root[data-theme='dark'] .record-list-content { color: #d0dedd; }
+:root[data-theme='dark'] .file-type-icon { background: #293938; color: #aec6c3; }
+:root[data-theme='dark'] .file-name { color: #d4e1e0; }
+
+:root[data-theme='dark'] .auth-page {
+  background: radial-gradient(ellipse at 14% 15%, #1a3331 0, transparent 36%), #111a1b;
+}
+:root[data-theme='dark'] .auth-shell {
+  border-color: #334242;
+  background: #1b2728;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+:root[data-theme='dark'] .auth-description,
+:root[data-theme='dark'] .auth-footer { color: #9aabab; }
+:root[data-theme='dark'] .auth-footer a { color: #76d4c5; }
+:root[data-theme='dark'] .auth-theme-toggle { color: #d6e4e3; }
+:root[data-theme='dark'] .auth-theme-toggle:hover { background: #2a3939 !important; }
+:root[data-theme='dark'] .recognition-actions { border-color: #344442; background: #202d2d; }
+:root[data-theme='dark'] .recent-visit-date { background: #263c39; }
+:root[data-theme='dark'] .recent-visit-arrow { color: #8fa5a2; }
+:root[data-theme='dark'] .table-counts { color: #aebfbe; }
+
+:root[data-theme='dark'] .mobile-bottom-nav {
+  border-top-color: #344141;
+  background: rgba(27, 39, 40, 0.97);
+  box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.2);
+}
+:root[data-theme='dark'] .mobile-nav-item { color: #9aabab; }
+:root[data-theme='dark'] .mobile-nav-item.is-active { background: #263c39; color: #72d7c8; }
+:root[data-theme='dark'] .header-theme-toggle { color: #d3e2e1; }
+:root[data-theme='dark'] .header-theme-toggle:hover { background: #2a3939 !important; }
+
+.auth-panel { position: relative; }
+.auth-theme-toggle { position: absolute; top: 16px; right: 18px; }

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { MedicineBoxFilled } from '@ant-design/icons';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface AuthShellProps {
   title: string;
@@ -25,6 +26,7 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
           <div className="auth-story-note">为自己和家人，留下一份安心的健康记录。</div>
         </section>
         <section className="auth-panel">
+          <ThemeToggle className="auth-theme-toggle" />
           <div className="auth-card">
             <div className="page-eyebrow">欢迎使用</div>
             <h2>{title}</h2>

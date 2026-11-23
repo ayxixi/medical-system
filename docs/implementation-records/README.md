@@ -32,3 +32,4 @@
 - [../session-implementation-record-2026-04-30.md](../session-implementation-record-2026-04-30.md)
 - [Issue #56：文档同步与 Docker Compose 部署手册](./issue-56/README.md)
 - [Issue #58：全站 UI/UX 改版](./issue-58/README.md)
+- [Issue #60：浅色/深色主题切换](./issue-60/README.md)
