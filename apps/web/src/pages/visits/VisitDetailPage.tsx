@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
   DatePicker,
-  Descriptions,
+  Empty,
   Form,
   Input,
   List,
@@ -20,7 +21,7 @@ import type { UploadProps } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
-import { ArrowLeftOutlined, UploadOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CalendarOutlined, FileOutlined, UploadOutlined, UserOutlined } from '@ant-design/icons';
 import { getVisit, updateVisit, type DiagnosisRecord, type Medication, type VisitFile } from '@/api/visits';
 import {
   createRecord,
@@ -37,6 +38,7 @@ import {
 import { deleteFile, readFile, replaceFile, uploadFile } from '@/api/files';
 import { extractErrorMessage } from '@/api/client';
 import { RecognitionInputActions } from '@/components/RecognitionInputActions';
+import { PageHeader } from '@/components/PageHeader';
 
 const PREVIEW_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
@@ -306,7 +308,7 @@ export default function VisitDetailPage() {
   });
 
   if (visitQuery.isLoading) {
-    return <Spin />;
+    return <div className="page-loading"><Spin size="large" /></div>;
   }
 
   if (visitQuery.isError || !visitQuery.data) {
@@ -315,9 +317,8 @@ export default function VisitDetailPage() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/visits')}>
           返回就诊列表
         </Button>
-        <Typography.Paragraph style={{ marginTop: 16 }}>
-          {extractErrorMessage(visitQuery.error, '加载失败')}
-        </Typography.Paragraph>
+        <Alert showIcon type="error" message="无法载入就诊详情"
+          description={extractErrorMessage(visitQuery.error, '加载失败')} style={{ marginTop: 16 }} />
       </div>
     );
   }
@@ -325,42 +326,56 @@ export default function VisitDetailPage() {
   const visit = visitQuery.data;
 
   return (
-    <div>
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/visits')}>
-          返回
-        </Button>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          就诊详情
-        </Typography.Title>
-        <Button onClick={() => {
-          visitForm.setFieldsValue({
-            date: dayjs(visit.date),
-            hospital: visit.hospital ?? '',
-            department: visit.department ?? '',
-            doctor: visit.doctor ?? '',
-            note: visit.note ?? '',
-          });
-          setVisitEditOpen(true);
-        }}>
-          编辑就诊
-        </Button>
-      </Space>
+    <section className="visit-detail-page">
+      <PageHeader
+        eyebrow="就诊档案 · 详情"
+        title="就诊详情"
+        description="查看并维护这次就诊的诊断、用药和相关附件。"
+        actions={(
+          <>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/visits')}>返回记录</Button>
+            <Button type="primary" onClick={() => {
+              visitForm.setFieldsValue({
+                date: dayjs(visit.date),
+                hospital: visit.hospital ?? '',
+                department: visit.department ?? '',
+                doctor: visit.doctor ?? '',
+                note: visit.note ?? '',
+              });
+              setVisitEditOpen(true);
+            }}>编辑就诊</Button>
+          </>
+        )}
+      />
 
-      <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 24 }}>
-        <Descriptions.Item label="成员">{visit.user?.name ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="就诊日期">
-          {dayjs(visit.date).format('YYYY-MM-DD HH:mm')}
-        </Descriptions.Item>
-        <Descriptions.Item label="医院">{visit.hospital ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="科室">{visit.department ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="医生">{visit.doctor ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="备注">
-          {visit.note ?? '-'}
-        </Descriptions.Item>
-      </Descriptions>
+      <Card className="visit-summary-card">
+        <div className="visit-summary-head">
+          <div className="visit-summary-person">
+            <span className="visit-person-avatar">{visit.user?.name?.slice(0, 1) || <UserOutlined />}</span>
+            <div className="visit-summary-title">
+              <div className="page-eyebrow">家庭成员：{visit.user?.name ?? '未知'}</div>
+              <h2>{visit.hospital || '就诊记录'}</h2>
+              {visit.department && <p>{visit.department}{visit.doctor ? ` · ${visit.doctor}` : ''}</p>}
+            </div>
+          </div>
+          <div className="visit-summary-date"><CalendarOutlined />{dayjs(visit.date).format('YYYY年M月D日 · HH:mm')}</div>
+        </div>
+        <div className="visit-meta-grid">
+          <div className="visit-meta-item"><span className="visit-meta-label">就诊成员</span><span className="visit-meta-value">{visit.user?.name ?? '未关联'}</span></div>
+          <div className="visit-meta-item"><span className="visit-meta-label">医院</span><span className="visit-meta-value">{visit.hospital || '尚未填写'}</span></div>
+          <div className="visit-meta-item"><span className="visit-meta-label">科室</span><span className="visit-meta-value">{visit.department || '尚未填写'}</span></div>
+          <div className="visit-meta-item"><span className="visit-meta-label">接诊医生</span><span className="visit-meta-value">{visit.doctor || '尚未填写'}</span></div>
+        </div>
+        {visit.note && (
+          <div className="visit-note">
+            <div className="visit-note-label">就诊备注</div>
+            <div className="visit-note-content">{visit.note}</div>
+          </div>
+        )}
+      </Card>
 
       <Modal
+        className="responsive-modal"
         title="编辑就诊"
         open={visitEditOpen}
         onOk={() => visitForm.submit()}
@@ -371,10 +386,12 @@ export default function VisitDetailPage() {
         maskClosable={!visitUpdateMutation.isPending}
         keyboard={!visitUpdateMutation.isPending}
         forceRender
+        width={760}
       >
         <Form
           form={visitForm}
           layout="vertical"
+          className="form-grid"
           disabled={visitUpdateMutation.isPending}
           onFinish={(values) => visitUpdateMutation.mutate(values)}
         >
@@ -382,17 +399,17 @@ export default function VisitDetailPage() {
             <DatePicker showTime format="YYYY-MM-DD HH:mm" />
           </Form.Item>
           <Form.Item label="医院" name="hospital">
-            <Input maxLength={200} />
+            <Input maxLength={200} placeholder="医院名称" />
           </Form.Item>
           <Form.Item label="科室" name="department">
-            <Input maxLength={200} />
+            <Input maxLength={200} placeholder="例如：心内科" />
           </Form.Item>
           <Form.Item label="医生" name="doctor">
-            <Input maxLength={200} />
+            <Input maxLength={200} placeholder="医生姓名" />
           </Form.Item>
-          <Form.Item label="备注">
+          <Form.Item label="就诊备注" className="form-wide">
             <Form.Item name="note" noStyle>
-              <Input.TextArea maxLength={1000} rows={3} />
+              <Input.TextArea maxLength={1000} rows={4} showCount placeholder="记录症状、检查结果或其他重要信息" />
             </Form.Item>
             {visitEditOpen && <RecognitionInputActions
               getCurrentText={() => visitForm.getFieldValue('note')}
@@ -403,8 +420,8 @@ export default function VisitDetailPage() {
       </Modal>
 
       <Card
-        title="诊断"
-        style={{ marginBottom: 16 }}
+        className="section-card"
+        title={<div className="page-section-title">诊断 <Tag>{visit.records?.length ?? 0}</Tag></div>}
         extra={
           <Button size="small" type="primary" onClick={openRecordCreate}>
             新增
@@ -413,9 +430,10 @@ export default function VisitDetailPage() {
       >
         <List<DiagnosisRecord>
           dataSource={visit.records ?? []}
-          locale={{ emptyText: '暂无诊断' }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无诊断记录" /> }}
           renderItem={(record) => (
             <List.Item
+              className="record-list-item"
               actions={[
                 <Button key="edit" size="small" onClick={() => openRecordEdit(record)}>
                   编辑
@@ -434,15 +452,15 @@ export default function VisitDetailPage() {
                 </Popconfirm>,
               ]}
             >
-              <Typography.Text>{record.diagnosis}</Typography.Text>
+              <div className="record-list-content">{record.diagnosis}</div>
             </List.Item>
           )}
         />
       </Card>
 
       <Card
-        title="用药"
-        style={{ marginBottom: 16 }}
+        className="section-card"
+        title={<div className="page-section-title">用药 <Tag>{visit.medications?.length ?? 0}</Tag></div>}
         extra={
           <Button size="small" type="primary" onClick={openMedicationCreate}>
             新增
@@ -451,9 +469,10 @@ export default function VisitDetailPage() {
       >
         <List<Medication>
           dataSource={visit.medications ?? []}
-          locale={{ emptyText: '暂无用药' }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无用药记录" /> }}
           renderItem={(medication) => (
             <List.Item
+              className="record-list-item"
               actions={[
                 <Button key="edit" size="small" onClick={() => openMedicationEdit(medication)}>
                   编辑
@@ -472,7 +491,7 @@ export default function VisitDetailPage() {
                 </Popconfirm>,
               ]}
             >
-              <Space size="middle" wrap>
+              <Space className="medication-list-content" size="small" wrap>
                 <Typography.Text strong>{medication.name}</Typography.Text>
                 {medication.dosage && <Tag>{medication.dosage}</Tag>}
                 {medication.frequency && <Tag color="blue">{medication.frequency}</Tag>}
@@ -484,7 +503,8 @@ export default function VisitDetailPage() {
       </Card>
 
       <Card
-        title="附件"
+        className="section-card"
+        title={<div className="page-section-title">检查附件 <Tag>{visit.files?.length ?? 0}</Tag></div>}
         extra={
           <Upload {...uploadProps}>
             <Button size="small" type="primary" icon={<UploadOutlined />}>
@@ -493,14 +513,15 @@ export default function VisitDetailPage() {
           </Upload>
         }
       >
-        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          支持 PDF / JPG / PNG / WebP，最大 10MB。
+        <Typography.Paragraph type="secondary" className="attachment-hint">
+          支持 PDF、JPG、PNG、WebP，单个文件最大 10 MB。
         </Typography.Paragraph>
         <List<VisitFile>
           dataSource={visit.files ?? []}
-          locale={{ emptyText: '暂无附件' }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无检查附件" /> }}
           renderItem={(file) => (
             <List.Item
+              className="file-list-item"
               actions={[
                 <Button key="download" size="small" disabled={fileReadMutation.isPending}
                   onClick={() => fileReadMutation.mutate({ file, mode: 'download' })}>
@@ -531,28 +552,37 @@ export default function VisitDetailPage() {
                 </Popconfirm>,
               ]}
             >
-              <Space>
-                <Typography.Text>{file.originalName}</Typography.Text>
-                <Tag>{(file.size / 1024).toFixed(1)} KB</Tag>
-                <Tag color="geekblue">{file.mimeType}</Tag>
-              </Space>
+              <div className="file-list-content">
+                <span className="file-type-icon"><FileOutlined /></span>
+                <div className="file-details">
+                  <Typography.Text className="file-name">{file.originalName}</Typography.Text>
+                  <div className="file-meta">
+                    <span>{(file.size / 1024).toFixed(1)} KB</span>
+                    <span>{file.mimeType}</span>
+                    <span>上传于 {dayjs(file.createdAt).format('YYYY-MM-DD')}</span>
+                  </div>
+                </div>
+              </div>
             </List.Item>
           )}
         />
       </Card>
 
-      <Modal open={!!preview} title={preview?.file.originalName} footer={null}
+      <Modal className="responsive-modal" open={!!preview} title={preview?.file.originalName} footer={null}
         onCancel={() => setPreview(undefined)}>
         {preview && <AttachmentPreview file={preview.file} blob={preview.blob} />}
       </Modal>
 
       <Modal
+        className="responsive-modal"
         title={recordModal.editing ? '编辑诊断' : '新增诊断'}
         open={recordModal.open}
         onOk={submitRecord}
         onCancel={() => setRecordModal({ open: false, editing: null })}
         confirmLoading={recordCreateMutation.isPending || recordUpdateMutation.isPending}
+        cancelButtonProps={{ disabled: recordCreateMutation.isPending || recordUpdateMutation.isPending }}
         destroyOnHidden
+        width={640}
       >
         <Form form={recordForm} layout="vertical">
           <Form.Item
@@ -563,7 +593,7 @@ export default function VisitDetailPage() {
               { max: 1000, message: '诊断不能超过 1000 字' },
             ]}
           >
-            <Input.TextArea rows={4} />
+            <Input.TextArea rows={5} showCount maxLength={1000} placeholder="输入诊断内容或使用下方识别工具" />
           </Form.Item>
           {recordModal.open && <RecognitionInputActions
             key={recordModal.editing?.id ?? "new"}
@@ -574,6 +604,7 @@ export default function VisitDetailPage() {
       </Modal>
 
       <Modal
+        className="responsive-modal"
         title={medicationModal.editing ? '编辑用药' : '新增用药'}
         open={medicationModal.open}
         onOk={submitMedication}
@@ -582,8 +613,9 @@ export default function VisitDetailPage() {
           medicationCreateMutation.isPending || medicationUpdateMutation.isPending
         }
         destroyOnHidden
+        width={640}
       >
-        <Form form={medicationForm} layout="vertical">
+        <Form form={medicationForm} layout="vertical" className="form-grid">
           <Form.Item
             label="药品名称"
             name="name"
@@ -592,7 +624,7 @@ export default function VisitDetailPage() {
               { max: 200, message: '名称不能超过 200 字' },
             ]}
           >
-            <Input />
+            <Input placeholder="药品名称" />
           </Form.Item>
           <Form.Item label="剂量" name="dosage">
             <Input maxLength={100} placeholder="例如：500mg" />
@@ -605,6 +637,6 @@ export default function VisitDetailPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </section>
   );
 }
