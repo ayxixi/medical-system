@@ -9,6 +9,7 @@ import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { ExportModule } from './modules/export/export.module';
 import { RecognitionModule } from './modules/recognition/recognition.module';
 import { FileModule } from './modules/file/file.module';
+import { HealthLogModule } from './modules/health-log/health-log.module';
 import { MedicationModule } from './modules/medication/medication.module';
 import { RecordModule } from './modules/record/record.module';
 import { UserModule } from './modules/user/user.module';
@@ -28,6 +29,7 @@ import { PrismaModule } from './prisma/prisma.module';
     RecordModule,
     MedicationModule,
     FileModule,
+    HealthLogModule,
   ],
   controllers: [HealthController],
   providers: [

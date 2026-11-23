@@ -8,6 +8,7 @@ const HomePage = lazy(() => import('./pages/home/HomePage'));
 const UsersPage = lazy(() => import('./pages/users/UsersPage'));
 const VisitsPage = lazy(() => import('./pages/visits/VisitsPage'));
 const VisitDetailPage = lazy(() => import('./pages/visits/VisitDetailPage'));
+const HealthLogsPage = lazy(() => import('./pages/health-logs/HealthLogsPage'));
 const AppLayout = lazy(() => import('./layouts/AppLayout'));
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/users" element={<UsersPage />} />
           <Route path="/visits" element={<VisitsPage />} />
           <Route path="/visits/:id" element={<VisitDetailPage />} />
+          <Route path="/health-logs" element={<HealthLogsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
