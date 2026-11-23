@@ -16,7 +16,7 @@ export function AuthShell({ title, description, children, footer }: AuthShellPro
         <section className="auth-story">
           <div className="auth-brand">
             <span className="auth-brand-mark"><MedicineBoxFilled /></span>
-            <span>安心记录 · 清晰管理</span>
+            <span>电子病历 · 清晰管理</span>
           </div>
           <div className="auth-story-copy">
             <div className="page-eyebrow">医疗记录系统</div>
