@@ -281,6 +281,86 @@ describe('账号隔离 (e2e)', () => {
     expect(ids).toContain(bobVisitId);
   });
 
+  it('病程提醒完整执行账号隔离与所有权动作', async () => {
+    const reminderPayload = {
+      userId: aliceUserId,
+      kind: 'temperature',
+      title: '测量体温',
+      nextAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      timeZone: 'Asia/Shanghai',
+      repeatDaily: false,
+    };
+
+    await request(httpServer).get('/health-reminders').expect(401);
+    await request(httpServer)
+      .post('/health-reminders')
+      .set('Authorization', `Bearer ${bobToken}`)
+      .send(reminderPayload)
+      .expect(404);
+
+    const created = await request(httpServer)
+      .post('/health-reminders')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send(reminderPayload)
+      .expect(201);
+    const reminderId = created.body.id as string;
+
+    const bobList = await request(httpServer)
+      .get('/health-reminders')
+      .set('Authorization', `Bearer ${bobToken}`)
+      .expect(200);
+    expect(bobList.body).toEqual([]);
+
+    await request(httpServer)
+      .get(`/health-reminders?userId=${aliceUserId}`)
+      .set('Authorization', `Bearer ${bobToken}`)
+      .expect(404);
+    await request(httpServer)
+      .patch(`/health-reminders/${reminderId}`)
+      .set('Authorization', `Bearer ${bobToken}`)
+      .send({ title: '跨账号修改' })
+      .expect(404);
+    await request(httpServer)
+      .post(`/health-reminders/${reminderId}/action`)
+      .set('Authorization', `Bearer ${bobToken}`)
+      .send({ action: 'complete' })
+      .expect(404);
+    await request(httpServer)
+      .delete(`/health-reminders/${reminderId}`)
+      .set('Authorization', `Bearer ${bobToken}`)
+      .expect(404);
+
+    const updated = await request(httpServer)
+      .patch(`/health-reminders/${reminderId}`)
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ title: '早晚测量体温' })
+      .expect(200);
+    expect(updated.body.title).toBe('早晚测量体温');
+
+    const action = await request(httpServer)
+      .post(`/health-reminders/${reminderId}/action`)
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ action: 'complete' })
+      .expect(201);
+    expect(action.body.completedAt).toBeTruthy();
+
+    const aliceActive = await request(httpServer)
+      .get(`/health-reminders?userId=${aliceUserId}`)
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .expect(200);
+    expect(aliceActive.body).toEqual([]);
+
+    const deletable = await request(httpServer)
+      .post('/health-reminders')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ ...reminderPayload, title: '删除用例' })
+      .expect(201);
+    await request(httpServer)
+      .delete(`/health-reminders/${deletable.body.id}`)
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .expect(204);
+  });
+
   it('Bob 无法用 Alice 的 visitId 创建诊断记录或用药', async () => {
     await request(httpServer)
       .post('/records')
