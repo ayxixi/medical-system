@@ -481,12 +481,30 @@ textarea { font: inherit; }
 .health-time-picker,
 .health-temperature-input { width: 100%; }
 .health-log-modal .ant-modal-body { padding-top: 18px; }
+.health-reminders-card .ant-card-body { display: grid; gap: 12px; }
+.health-reminders-info { margin-bottom: 2px; }
+.health-reminders-info .ant-alert-message { font-size: 12px; }
+.health-reminders-info .ant-alert-description { font-size: 11px; }
+.health-reminders-due { display: grid; gap: 8px; }
+.health-reminder-due-content { display: grid; gap: 8px; }
+.health-reminder-list { display: grid; }
+.health-reminder-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.health-reminder-row:last-child { border-bottom: 0; }
+.health-reminder-row.is-paused { opacity: 0.66; }
+.health-reminder-main { display: grid; min-width: 0; gap: 4px; }
+.health-reminder-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.health-reminder-heading .ant-tag { margin: 0; }
+.health-reminder-main .ant-typography { overflow-wrap: anywhere; font-size: 11px; }
+.health-reminder-actions { flex-wrap: wrap; justify-content: flex-end; }
+.health-reminder-time-picker { width: 100%; }
+.health-reminder-modal .ant-form-item-extra { font-size: 11px; }
 
 :root[data-theme='dark'] .health-quick-action.ant-btn { background: #1b2728; }
 :root[data-theme='dark'] .health-quick-action.temperature > .anticon { color: #f1937f; }
 :root[data-theme='dark'] .health-quick-action.symptom > .anticon { color: #e09aba; }
 :root[data-theme='dark'] .health-log-icon.temperature { background: #462d2b; color: #f1937f; }
 :root[data-theme='dark'] .health-log-icon.symptom { background: #402c37; color: #e09aba; }
+:root[data-theme='dark'] .health-reminders-info { border-color: #344545; background: #202d2e; }
 
 @media (max-width: 600px) {
   .health-logs-page { gap: 13px; }
@@ -509,6 +527,10 @@ textarea { font: inherit; }
   .health-log-icon { width: 32px; height: 32px; border-radius: 10px; font-size: 15px; }
   .health-log-actions { grid-column: 2; justify-self: end; margin-top: -4px; }
   .health-log-modal .ant-form-item-extra { font-size: 11px; }
+  .health-reminder-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .health-reminder-actions { justify-content: flex-start; }
+  .health-reminders-card .ant-card-head { padding: 0 13px; }
+  .health-reminders-card .ant-card-body { padding: 13px; }
 }
 
 @media (max-width: 360px) {
