@@ -34,8 +34,8 @@
 
 系统由以下部分组成：
 
-- 前端单页应用：位于 `apps/web/`，负责登录、成员管理、就诊与详情操作。
-- 后端服务：位于 `apps/server/`，负责认证、业务 CRUD、文件存储与账号隔离。
+- 前端单页应用：位于 `apps/web/`，负责登录、成员管理、就诊与日常病程记录。
+- 后端服务：位于 `apps/server/`，负责认证、业务 CRUD、文件存储、病程记录与账号隔离。
 - 数据库：当前仅配置并使用 SQLite；PostgreSQL 是后续迁移方向，尚未实现或验证。
 - 文件存储：当前支持本地存储，并已预留 S3 兼容存储实现。
 - 文档与运维资产：位于 `docs/` 与 `docker/`。
@@ -46,7 +46,7 @@
 flowchart LR
   Browser[前端浏览器\napps/web] -->|HTTP /api| API[NestJS 服务\napps/server]
   API --> Auth[认证与鉴权\nauth module]
-  API --> Domain[业务模块\nuser visit record medication file]
+  API --> Domain[业务模块\nuser visit record medication health-log file]
   Domain --> Prisma[Prisma ORM]
   Prisma --> DB[(SQLite)]
   Domain --> Storage[本地文件 / S3 存储]
@@ -103,6 +103,7 @@ sequenceDiagram
 - `apps/server/src/modules/auth/`：注册、登录、当前账号、JWT 鉴权。
 - `apps/server/src/modules/user/`：家庭成员管理。
 - `apps/server/src/modules/visit/`：就诊记录管理。
+- `apps/server/src/modules/health-log/`：家庭成员日常病程记录及体温/服药/症状事件。
 - `apps/server/src/modules/record/`：诊断记录管理。
 - `apps/server/src/modules/medication/`：用药记录管理。
 - `apps/server/src/modules/file/`：附件上传、替换、删除与存储实现。
@@ -119,6 +120,7 @@ sequenceDiagram
 - `apps/web/src/pages/home/`：首页。
 - `apps/web/src/pages/users/`：家庭成员页面。
 - `apps/web/src/pages/visits/`：就诊列表与详情页。
+- `apps/web/src/pages/health-logs/`：手机优先的日常病程时间线。
 - `apps/web/src/api/`：按领域拆分的 API 封装。
 - `apps/web/src/store/`：登录态与账户信息状态管理。
 - `apps/web/src/routes/RequireAuth.tsx`：受保护路由。
@@ -142,6 +144,7 @@ sequenceDiagram
 | `auth` | `auth.controller.ts` -> `auth.service.ts` -> `auth.repository.ts` -> `dto/` -> `guards/` / `strategies/` / `decorators/` | 注册、登录、当前账号、JWT 鉴权链路 |
 | `user` | `user.controller.ts` -> `user.service.ts` -> `user.repository.ts` -> `dto/` | 家庭成员 CRUD 与最少保留一个成员约束 |
 | `visit` | `visit.controller.ts` -> `visit.service.ts` -> `visit.repository.ts` -> `dto/` | 就诊主聚合、筛选、分页、排序 |
+| `health-log` | `health-log.controller.ts` -> `health-log.service.ts` -> `health-log.repository.ts` -> `dto/` | 体温、实际服药、症状与日常病程时间线 |
 | `record` | `record.controller.ts` -> `record.service.ts` -> `record.repository.ts` -> `dto/` | 诊断记录读写与账号边界 |
 | `medication` | `medication.controller.ts` -> `medication.service.ts` -> `medication.repository.ts` -> `dto/` | 用药记录读写与账号边界 |
 | `file` | `file.controller.ts` -> `file.service.ts` -> `file.repository.ts` -> `storage/` -> `dto/` | 附件上传、替换、删除与存储切换 |
@@ -163,6 +166,7 @@ sequenceDiagram
 | 成员页 | `src/pages/users/UsersPage.tsx` -> `src/api/users.ts` | 成员列表与维护 |
 | 就诊列表 | `src/pages/visits/VisitsPage.tsx` -> `src/api/visits.ts` | 就诊搜索、筛选、排序、分页 |
 | 就诊详情 | `src/pages/visits/VisitDetailPage.tsx` -> `src/api/records.ts` / `medications.ts` / `files.ts` | 诊断、用药、附件的聚合操作 |
+| 病程记录 | `src/pages/health-logs/HealthLogsPage.tsx` -> `src/api/healthLogs.ts` | 快速记录、体温趋势、成员时间线 |
 
 对新成员来说，最短的理解路径通常是：
 
@@ -227,6 +231,7 @@ sequenceDiagram
 
 - `Account` 直接拥有多个 `User`
 - `Visit` 通过 `userId` 间接归属到某个 `Account`
+- `HealthLog` 通过 `userId` 间接归属到某个 `Account`
 - `DiagnosisRecord`、`Medication`、`VisitFile` 再通过 `visitId` 间接归属到某个 `Account`
 
 因此仓储层查询通常需要使用关系条件，而不是只按主键命中。
@@ -240,6 +245,7 @@ sequenceDiagram
 | `auth` | 注册账号、登录校验、返回当前账号 | 注册时按用户名和邮箱查重；登录支持用户名，旧账号兼容邮箱 | 认证域主要围绕 `Account`，不走业务资源跨账号过滤 |
 | `user` | 成员 CRUD、保证账号下至少保留一个成员 | 仅允许访问当前账号下的成员 | `where: { accountId }`、`where: { id, accountId }`，更新/删除使用 `updateMany` / `deleteMany` |
 | `visit` | 校验成员归属、处理筛选/排序/分页、维护就诊主记录 | 仅允许访问当前账号成员名下的就诊 | `where: { user: { accountId } }`，创建前先校验 `userId + accountId` |
+| `health-log` | 校验成员归属、记录体温/用药/症状、按时间范围查询病程 | 仅允许访问当前账号成员名下的病程记录 | `where: { user: { accountId } }`，创建前先校验 `userId + accountId` |
 | `record` | 基于某次就诊新增、更新、删除诊断 | 仅允许访问当前账号就诊下的诊断记录 | `where: { visit: { user: { accountId } } }`，创建前先校验 `visitId + accountId` |
 | `medication` | 基于某次就诊新增、更新、删除用药 | 仅允许访问当前账号就诊下的用药记录 | `where: { visit: { user: { accountId } } }`，更新/删除使用关系过滤 |
 | `file` | 上传、替换、删除附件并协调存储 | 仅允许访问当前账号就诊下的附件记录 | `where: { id, visit: { user: { accountId } } }`，上传前先校验 `visitId + accountId` |
@@ -273,6 +279,7 @@ flowchart TD
   App --> Auth[AuthModule]
   App --> User[UserModule]
   App --> Visit[VisitModule]
+  App --> HealthLog[HealthLogModule]
   App --> Record[RecordModule]
   App --> Medication[MedicationModule]
   App --> File[FileModule]
@@ -280,6 +287,7 @@ flowchart TD
   Auth --> Prisma
   User --> Prisma
   Visit --> Prisma
+  HealthLog --> Prisma
   Record --> Prisma
   Medication --> Prisma
   File --> Prisma
@@ -388,6 +396,7 @@ flowchart TD
 | `/users` | `src/api/users.ts#listUsers`、`createUser`、`updateUser`、`deleteUser` | `GET/POST/PATCH/DELETE /users` | 家庭成员管理 |
 | `/visits` | `src/api/users.ts#listUsers`、`src/api/visits.ts#listVisits`、`createVisit`、`deleteVisit` | `GET /users`、`GET/POST/DELETE /visits` | 就诊筛选、列表、新增、删除 |
 | `/visits/:id` | `src/api/visits.ts#getVisit`、`src/api/records.ts`、`src/api/medications.ts`、`src/api/files.ts` | `GET /visits/:id`、`/records`、`/medications`、`/files` 相关接口 | 就诊详情、诊断/用药/附件聚合操作 |
+| `/health-logs` | `src/api/healthLogs.ts` | `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | 快捷记录、体温趋势、成员时间线 |
 
 从页面角度看，API 依赖呈现为“认证域、成员域、就诊域、就诊子资源域”四层逐步展开。
 
@@ -405,6 +414,7 @@ flowchart LR
   VisitDetail --> RecordsApi[records.ts]
   VisitDetail --> MedicationsApi[medications.ts]
   VisitDetail --> FilesApi[files.ts]
+  HealthLogs[HealthLogsPage] --> HealthLogsApi[healthLogs.ts]
 ```
 
 ### 6.7 页面 -> API -> 后端模块 -> 数据模型 映射表
@@ -422,6 +432,7 @@ flowchart LR
 | `VisitDetailPage` 诊断区块 | `src/api/records.ts#createRecord`、`updateRecord`、`deleteRecord` | `record.controller.ts` -> `POST/PATCH/DELETE /records...`、`GET /visits/:visitId/records` | `DiagnosisRecord`、`Visit` |
 | `VisitDetailPage` 用药区块 | `src/api/medications.ts#createMedication`、`updateMedication`、`deleteMedication` | `medication.controller.ts` -> `POST/PATCH/DELETE /medications...`、`GET /visits/:visitId/medications` | `Medication`、`Visit` |
 | `VisitDetailPage` 附件区块 | `src/api/files.ts#uploadFile`、`replaceFile`、`deleteFile` | `file.controller.ts` -> `POST /files/upload`、`PUT /files/:id`、`DELETE /files/:id`、`GET /visits/:visitId/files` | `VisitFile`、`Visit` |
+| `HealthLogsPage` `/health-logs` | `src/api/healthLogs.ts` 的列表、新建、更新、删除 | `health-log.controller.ts` -> `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | `HealthLog`、`User` |
 
 如果从工程主线来理解，这张表可以再压缩成下面这条链路：
 
@@ -435,6 +446,8 @@ flowchart LR
 
 `Account -> User -> Visit -> DiagnosisRecord / Medication / VisitFile`
 
+日常病程记录从成员直接关联，与就诊主记录分开保存：`Account -> User -> HealthLog`。
+
 含义如下：
 
 - `Account`：可登录账号。
@@ -443,11 +456,13 @@ flowchart LR
 - `DiagnosisRecord`：诊断记录。
 - `Medication`：用药记录。
 - `VisitFile`：附件记录。
+- `HealthLog`：成员按时间记录的体温、实际服药、症状及日常情况。
 
 ```mermaid
 erDiagram
   Account ||--o{ User : owns
   User ||--o{ Visit : has
+  User ||--o{ HealthLog : has
   Visit ||--o{ DiagnosisRecord : contains
   Visit ||--o{ Medication : contains
   Visit ||--o{ VisitFile : contains
@@ -456,16 +471,17 @@ erDiagram
 该模型体现了两个关键事实：
 
 - 登录账号与家庭成员是分开的两个概念。
-- 除 `Account` 与 `User` 外，其余领域对象都围绕 `Visit` 聚合。
+- `Visit` 子资源围绕就诊聚合；`HealthLog` 是成员下独立的病程时间线，不依附某次就诊。
 
 ## 7.1 接口域地图
 
-后端接口按领域可划分为 6 个域，每个域在前端也有对应的 API 封装模块。
+后端接口按领域可划分为 7 个域，每个域在前端也有对应的 API 封装模块。
 
 | 接口域 | 前端 API 模块 | 典型后端接口 | 主要职责 |
 | --- | --- | --- | --- |
 | 认证域 | `src/api/auth.ts` | `POST /auth/register`、`POST /auth/login`、`GET /auth/me` | 建立与恢复登录会话 |
 | 成员域 | `src/api/users.ts` | `POST /users`、`GET /users`、`PATCH /users/:id`、`DELETE /users/:id` | 维护账号下家庭成员 |
+| 日常病程域 | `src/api/healthLogs.ts` | `POST/GET /health-logs`、`PATCH/DELETE /health-logs/:id` | 维护成员按时间记录的体温、服药和症状 |
 | 就诊主域 | `src/api/visits.ts` | `POST /visits`、`GET /visits`、`GET /visits/:id`、`PATCH /visits/:id`、`DELETE /visits/:id` | 管理就诊主记录与筛选聚合 |
 | 诊断子资源域 | `src/api/records.ts` | `POST /records`、`GET /visits/:visitId/records`、`PATCH /records/:id`、`DELETE /records/:id` | 管理就诊下的诊断记录 |
 | 用药子资源域 | `src/api/medications.ts` | `POST /medications`、`GET /visits/:visitId/medications`、`PATCH /medications/:id`、`DELETE /medications/:id` | 管理就诊下的用药记录 |
@@ -477,6 +493,7 @@ erDiagram
 flowchart TD
   Auth[认证域 /auth]
   Users[成员域 /users]
+  HealthLogs[日常病程域 /health-logs]
   Visits[就诊主域 /visits]
   Records[诊断子资源域 /records]
   Medications[用药子资源域 /medications]
@@ -484,6 +501,7 @@ flowchart TD
 
   Auth --> Users
   Users --> Visits
+  Users --> HealthLogs
   Visits --> Records
   Visits --> Medications
   Visits --> Files

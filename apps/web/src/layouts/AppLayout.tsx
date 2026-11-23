@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Avatar, Button, Dropdown, Grid, Layout, Typography } from 'antd';
 import {
   HomeOutlined,
+  HeartOutlined,
   LogoutOutlined,
   MedicineBoxOutlined,
   MenuFoldOutlined,
@@ -18,6 +19,7 @@ const navigation = [
   { key: '/', label: '首页', shortLabel: '首页', icon: <HomeOutlined /> },
   { key: '/users', label: '家庭成员', shortLabel: '成员', icon: <TeamOutlined /> },
   { key: '/visits', label: '就诊记录', shortLabel: '就诊', icon: <MedicineBoxOutlined /> },
+  { key: '/health-logs', label: '西西记录', shortLabel: '西西记录', icon: <HeartOutlined /> },
 ];
 
 export default function AppLayout() {
