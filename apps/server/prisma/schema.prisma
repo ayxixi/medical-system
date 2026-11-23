@@ -8,13 +8,13 @@ datasource db {
 }
 
 model Account {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   username     String?    @unique
   passwordHash String
-  tokenVersion Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  tokenVersion Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   users        User[]
   auditLogs    AuditLog[]
 }
@@ -35,13 +35,14 @@ model AuditLog {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  accountId String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  visits    Visit[]
+  id         String      @id @default(cuid())
+  accountId  String
+  name       String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  account    Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  visits     Visit[]
+  healthLogs HealthLog[]
 
   @@index([accountId])
 }
@@ -63,6 +64,24 @@ model Visit {
 
   @@index([userId])
   @@index([userId, date])
+}
+
+model HealthLog {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String
+  occurredAt   DateTime @default(now())
+  temperature  Float?
+  medicineName String?
+  dosage       String?
+  symptoms     String?
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([userId, type, occurredAt])
 }
 
 model DiagnosisRecord {
@@ -117,8 +136,8 @@ model AttachmentCleanup {
 }
 
 model LoginAttempt {
-  key         String @id
-  windowStart BigInt
-  count       Int
+  key          String @id
+  windowStart  BigInt
+  count        Int
   blockedUntil BigInt
 }
