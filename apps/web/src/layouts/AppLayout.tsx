@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const { Header, Sider, Content } = Layout;
 const navigation = [
@@ -83,6 +84,7 @@ export default function AppLayout() {
             <span>安心病历</span>
           </div>
           <div className="header-spacer" />
+          <ThemeToggle className="header-theme-toggle" />
           <Dropdown
             trigger={['click']}
             menu={{
