@@ -305,8 +305,17 @@ def main():
     )
     for directory, executable in ((SERVER, "prisma"), (WEB, "vite")):
         cli = directory / "node_modules" / ".bin" / (executable + (".cmd" if WINDOWS else ""))
-        if not cli.is_file():
+        stamp = directory / "node_modules" / ".medical-npm-dependencies"
+        dependency_hash = hashlib.sha256(
+            (directory / "package.json").read_bytes()
+            + b"\0"
+            + (directory / "package-lock.json").read_bytes()
+        ).hexdigest()
+        if not cli.is_file() or not stamp.is_file() or stamp.read_text(encoding="utf-8") != dependency_hash:
+            stamp.unlink(missing_ok=True)
+            print(f"正在同步 {directory.name} 的 npm 依赖…", flush=True)
             subprocess.run([npm, "ci", "--include=dev"], cwd=directory, env=env, check=True)
+            stamp.write_text(dependency_hash, encoding="utf-8")
 
     subprocess.run([npm, "run", "prisma:generate"], cwd=SERVER, env=env, check=True)
     migration_env = env.copy()
