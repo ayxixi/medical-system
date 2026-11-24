@@ -26,9 +26,9 @@ export async function deleteFile(id: string): Promise<void> {
   await apiClient.delete(`/files/${id}`);
 }
 
-export async function readFile(id: string): Promise<Blob> {
+export async function readFile(id: string, signal?: AbortSignal): Promise<Blob> {
   try {
-    const { data } = await apiClient.get<Blob>(`/files/${id}/content`, { responseType: 'blob' });
+    const { data } = await apiClient.get<Blob>(`/files/${id}/content`, { responseType: 'blob', signal });
     return data;
   } catch (error) {
     if (isAxiosError(error) && error.response?.status === 404) {

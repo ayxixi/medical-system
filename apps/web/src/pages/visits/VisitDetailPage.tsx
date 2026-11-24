@@ -21,7 +21,7 @@ import type { UploadProps } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
-import { ArrowLeftOutlined, CalendarOutlined, FileOutlined, UploadOutlined, UserOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CalendarOutlined, UploadOutlined, UserOutlined } from '@ant-design/icons';
 import { getVisit, updateVisit, type DiagnosisRecord, type Medication, type VisitFile } from '@/api/visits';
 import {
   createRecord,
@@ -38,6 +38,8 @@ import {
 import { deleteFile, readFile, replaceFile, uploadFile } from '@/api/files';
 import { extractErrorMessage } from '@/api/client';
 import { RecognitionInputActions } from '@/components/RecognitionInputActions';
+import { AttachmentScan } from '@/components/AttachmentScan';
+import { AttachmentThumbnail } from '@/components/AttachmentThumbnail';
 import { PageHeader } from '@/components/PageHeader';
 
 const PREVIEW_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -506,11 +508,15 @@ export default function VisitDetailPage() {
         className="section-card"
         title={<div className="page-section-title">检查附件 <Tag>{visit.files?.length ?? 0}</Tag></div>}
         extra={
-          <Upload {...uploadProps}>
-            <Button size="small" type="primary" icon={<UploadOutlined />}>
-              添加附件
-            </Button>
-          </Upload>
+          <Space wrap>
+            <Upload {...uploadProps}>
+              <Button size="small" type="primary" icon={<UploadOutlined />}>添加附件</Button>
+            </Upload>
+            <AttachmentScan key={visit.id} onUpload={async (file) => {
+              await uploadFile(visit.id, file);
+              invalidate();
+            }} />
+          </Space>
         }
       >
         <Typography.Paragraph type="secondary" className="attachment-hint">
@@ -553,7 +559,8 @@ export default function VisitDetailPage() {
               ]}
             >
               <div className="file-list-content">
-                <span className="file-type-icon"><FileOutlined /></span>
+                <AttachmentThumbnail key={file.storedName} file={file}
+                  onPreview={() => fileReadMutation.mutate({ file, mode: 'preview' })} />
                 <div className="file-details">
                   <Typography.Text className="file-name">{file.originalName}</Typography.Text>
                   <div className="file-meta">
