@@ -444,6 +444,7 @@ flowchart LR
 | `HealthLogsPage` `/health-logs` | `src/api/healthLogs.ts` 的列表、新建、更新、删除 | `health-log.controller.ts` -> `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | `HealthLog`、`User` |
 | `HealthLogsPage` 提醒区 | `src/api/healthReminders.ts` 的列表、创建、更新、动作、删除 | `health-reminder.controller.ts` -> `/health-reminders` CRUD 与 action | `HealthReminder`、`User` |
 | 账号菜单 -> 数据导出 | `apiClient` -> `GET /export/archive` | `export.controller.ts` -> `ExportService` -> `FileService` / 当前账号文件存储 | 当前账号的医疗数据及 `VisitFile` 原件 |
+| `VisitSummaryPage` `/visit-summary` AI 摘要 | `apiClient` -> `GET /ai/models`、`POST /ai/models/:id/summarize` | `ai.controller.ts` -> 当前启用的本机/局域网模型 | 用户确认发送的病程与就诊文字（不含附件） |
 
 如果从工程主线来理解，这张表可以再压缩成下面这条链路：
 

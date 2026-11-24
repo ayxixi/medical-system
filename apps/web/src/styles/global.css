@@ -589,6 +589,8 @@ textarea { font: inherit; }
 .visit-summary-filters input { font-size: 16px; }
 .visit-summary-document { background: #fff; color: #172827; padding: clamp(16px, 4vw, 36px); border-radius: 12px; overflow-wrap: anywhere; }
 .visit-summary-text { display: grid; gap: 12px; line-height: 1.7; }
+.visit-summary-ai { width: 100%; }
+.visit-summary-ai > summary { cursor: pointer; font-weight: 650; }
 .visit-summary-entry { min-width: 0; break-inside: avoid-page; page-break-inside: avoid; }
 .visit-summary-entry h3 { margin: 0 0 6px; color: #245e59; font-size: 1em; font-weight: 700; }
 .visit-summary-entry p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
