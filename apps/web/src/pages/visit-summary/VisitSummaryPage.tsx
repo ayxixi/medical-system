@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Checkbox, Input, Select, Space, Spin } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -9,6 +9,7 @@ import { listVisits, type Visit } from '@/api/visits';
 import { extractErrorMessage } from '@/api/client';
 import { PageHeader } from '@/components/PageHeader';
 import { useAuthStore } from '@/store/auth';
+import { exportVisitPackage, maxPackageBytes } from './exportVisitPackage';
 
 const stamp = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm');
 const types = { temperature: '体温', medication: '服药', symptom: '症状', note: '日常' };
@@ -49,16 +50,52 @@ function SummaryPreview({ name, from, to, logs, visits }: {
   const attachments = visits.flatMap((visit) => (visit.files ?? []).map((file) => ({ file, date: visit.date })));
   const summary = edited ?? generateSummary(logs, visits);
   const chosen = attachments.filter(({ file }) => checked.includes(file.id));
+  const selectedBytes = chosen.reduce((total, { file }) => total + file.size, 0);
+  const controller = useRef<AbortController>();
+  const [progress, setProgress] = useState<number>();
+  const [exportError, setExportError] = useState('');
+  useEffect(() => () => controller.current?.abort(), []);
+
+  async function downloadPackage() {
+    if (controller.current) return;
+    const current = new AbortController();
+    controller.current = current;
+    setProgress(0);
+    setExportError('');
+    const attachmentList = chosen.map(({ file, date }) => `${dayjs(date).format('YYYY-MM-DD')} · ${file.originalName}`);
+    const contents = ['就诊资料包', `${name} · ${from} 至 ${to}`, '', summary,
+      ...(attachmentList.length ? ['', '检查附件清单', ...attachmentList] : [])].join('\n');
+    try {
+      const zip = await exportVisitPackage(contents, chosen.map(({ file }) => file), current.signal, setProgress);
+      if (current.signal.aborted) return;
+      const url = URL.createObjectURL(zip);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `就诊资料包-${from}-${to}.zip`;
+      document.body.append(link);
+      try {
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      }
+    } catch (error) {
+      if (!current.signal.aborted) setExportError(extractErrorMessage(error, '资料包导出失败'));
+    } finally {
+      controller.current = undefined;
+      if (!current.signal.aborted) setProgress(undefined);
+    }
+  }
 
   return <>
     <Card className="visit-summary-controls" title="编辑摘要">
       <Space direction="vertical" style={{ width: '100%' }}>
         <Input.TextArea aria-label="摘要内容" value={summary} autoSize={{ minRows: 5, maxRows: 13 }}
-          style={{ fontSize: 16 }} onChange={(event) => setEdited(event.target.value)} />
-        {edited !== undefined && <Button onClick={() => setEdited(undefined)}>恢复自动摘要</Button>}
+          style={{ fontSize: 16 }} disabled={progress !== undefined} onChange={(event) => setEdited(event.target.value)} />
+        {edited !== undefined && <Button disabled={progress !== undefined} onClick={() => setEdited(undefined)}>恢复自动摘要</Button>}
         {attachments.length > 0 && <>
-          <strong>纳入附件清单</strong>
-          <Checkbox.Group value={checked} onChange={setChecked}>
+          <strong>选择要导出的附件</strong>
+          <Checkbox.Group disabled={progress !== undefined} value={checked} onChange={setChecked}>
             <Space direction="vertical">
               {attachments.map(({ file, date }) => <Checkbox key={file.id} value={file.id}>
                 {dayjs(date).format('YYYY-MM-DD')} · {file.originalName}
@@ -66,7 +103,15 @@ function SummaryPreview({ name, from, to, logs, visits }: {
             </Space>
           </Checkbox.Group>
         </>}
-        <Button type="primary" onClick={() => window.print()}>打印或另存为 PDF</Button>
+        <Space wrap>
+          <Button onClick={() => window.print()}>打印或另存为 PDF</Button>
+          <Button type="primary" loading={progress !== undefined} disabled={selectedBytes > maxPackageBytes}
+            onClick={() => void downloadPackage()}>下载资料包 ZIP</Button>
+        </Space>
+        <span>ZIP 包含文字摘要和勾选的附件原件。打印版包含摘要和附件清单。</span>
+        {selectedBytes > maxPackageBytes && <Alert type="warning" message="已选附件超过 50 MB，请减少勾选数量" />}
+        {progress !== undefined && <span role="status">正在打包，已读取 {progress} / {chosen.length} 个附件</span>}
+        {exportError && <Alert type="error" message={exportError} />}
       </Space>
     </Card>
     <article className="visit-summary-document" aria-label="就诊资料包预览">
