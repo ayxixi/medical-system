@@ -3,6 +3,7 @@ import { Avatar, Button, Dropdown, Grid, Layout, Typography } from 'antd';
 import {
   HomeOutlined,
   MessageOutlined,
+  SettingOutlined,
   HeartOutlined,
   LogoutOutlined,
   MedicineBoxOutlined,
@@ -22,6 +23,7 @@ const navigation = [
   { key: '/visits', label: '就诊记录', shortLabel: '就诊', icon: <MedicineBoxOutlined /> },
   { key: '/health-logs', label: '西西记录', shortLabel: '西西记录', icon: <HeartOutlined /> },
   { key: '/ai', label: 'AI 问诊', shortLabel: '问诊', icon: <MessageOutlined /> },
+  { key: '/settings', label: '设定', shortLabel: '设定', icon: <SettingOutlined /> },
 ];
 
 export default function AppLayout() {
