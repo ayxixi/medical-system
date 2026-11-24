@@ -41,3 +41,4 @@
 - [Issue #106：账号完整数据 ZIP 导出](./issue-106/README.md)
 - [Issue #108：本机 AI 病历摘要](./issue-108/README.md)
 - [Issue #110：修复 ZIP 导出服务启动依赖](./issue-110/README.md)
+- [Issue #112：只读附件一致性盘点](./issue-112/README.md)
