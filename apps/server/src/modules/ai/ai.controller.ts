@@ -109,9 +109,16 @@ export class AiController {
     } catch {
       return false;
     }
-    return this.configuredModels().some((entry) => completionEndpoint(entry) === endpoint)
-      || (this.config.get<string>('AI_MODEL_ALLOWED_ENDPOINTS') ?? '').split(',')
-        .map((entry) => entry.trim()).includes(endpoint);
+    const allowed = ['AI_MODEL_ALLOWED_ENDPOINTS', 'AI_MODEL_LAUNCH_ENDPOINTS']
+      .flatMap((key) => (this.config.get<string>(key) ?? '').split(','))
+      .some((entry) => {
+        try {
+          return localEndpoint(entry.trim()) === endpoint;
+        } catch {
+          return false;
+        }
+      });
+    return allowed || this.configuredModels().some((entry) => completionEndpoint(entry) === endpoint);
   }
 
   private publicModel({ id, name, model, baseUrl, exactEndpoint, enabled, isDefault }: Model) {
@@ -194,7 +201,7 @@ export class AiController {
   }
 
   private async complete(model: Model, content: string, system?: string, destination?: Pick<Model, 'baseUrl' | 'model'>) {
-    if (!this.approved(model)) throw new BadRequestException('此请求地址尚未由部署者批准');
+    if (!this.approved(model)) throw new BadRequestException('此请求地址尚未获准。请使用 start.py --ai-server 指定局域网 AI 地址，或在部署配置中批准完整请求地址。');
     const endpoint = completionEndpoint(model);
     // Older clients sent the base URL. Accept it only for the original append-path mode.
     const originalMode = !model.exactEndpoint && endpoint !== model.baseUrl;
