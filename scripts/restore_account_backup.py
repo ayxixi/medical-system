@@ -345,14 +345,72 @@ def duplicate_import(connection: sqlite3.Connection, account_id: str, digest: st
     return row is not None
 
 
-def preview_counts(counts: dict[str, int], account_id: str, digest: str) -> None:
+def target_counts(connection: sqlite3.Connection, account_id: str) -> dict[str, int]:
+    queries = {
+        "users": 'SELECT COUNT(*) FROM "User" WHERE accountId = ?',
+        "visits": 'SELECT COUNT(*) FROM "Visit" v JOIN "User" u ON u.id = v.userId WHERE u.accountId = ?',
+        "diagnoses": 'SELECT COUNT(*) FROM "DiagnosisRecord" r JOIN "Visit" v ON v.id = r.visitId JOIN "User" u ON u.id = v.userId WHERE u.accountId = ?',
+        "medications": 'SELECT COUNT(*) FROM "Medication" m JOIN "Visit" v ON v.id = m.visitId JOIN "User" u ON u.id = v.userId WHERE u.accountId = ?',
+        "healthLogs": 'SELECT COUNT(*) FROM "HealthLog" h JOIN "User" u ON u.id = h.userId WHERE u.accountId = ?',
+        "reminders": 'SELECT COUNT(*) FROM "HealthReminder" h JOIN "User" u ON u.id = h.userId WHERE u.accountId = ?',
+        "attachments": 'SELECT COUNT(*) FROM "VisitFile" f JOIN "Visit" v ON v.id = f.visitId JOIN "User" u ON u.id = v.userId WHERE u.accountId = ?',
+    }
+    return {key: int(connection.execute(sql, (account_id,)).fetchone()[0]) for key, sql in queries.items()}
+
+
+def format_bytes(value: int) -> str:
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    amount = float(value)
+    for unit in units:
+        if amount < 1024 or unit == units[-1]:
+            return f"{amount:.1f} {unit}"
+        amount /= 1024
+    return f"{value} B"
+
+
+def check_attachment_capacity(upload_root: Path, attachment_bytes: int) -> dict[str, int | bool]:
+    try:
+        free_bytes = shutil.disk_usage(upload_root).free
+    except OSError as error:
+        raise ValueError("无法检测附件目录所在磁盘的可用空间，已停止恢复") from error
+    # Keep a small reserve for SQLite growth and filesystem metadata.
+    reserve_bytes = max(16 * 1024 * 1024, math.ceil(attachment_bytes * 0.05))
+    required_bytes = attachment_bytes + reserve_bytes
+    return {
+        "freeBytes": free_bytes,
+        "attachmentBytes": attachment_bytes,
+        "reserveBytes": reserve_bytes,
+        "requiredBytes": required_bytes,
+        "enough": free_bytes >= required_bytes,
+    }
+
+
+def preview_report(
+    counts: dict[str, int],
+    existing: dict[str, int],
+    account_id: str,
+    digest: str,
+    archive_bytes: int,
+    capacity: dict[str, int | bool],
+) -> None:
     print(f"目标账号 ID：{account_id}")
+    print("目标账号当前数量 / 本次追加数量：")
     for label, key in (
         ("家庭成员", "users"), ("就诊", "visits"), ("诊断", "diagnoses"),
         ("用药", "medications"), ("病程", "healthLogs"),
         ("提醒", "reminders"), ("附件", "attachments"),
     ):
-        print(f"{label}：{counts[key]}")
+        print(f"  {label}：{existing[key]} / +{counts[key]}")
+    print(f"ZIP 文件：{format_bytes(archive_bytes)}")
+    print(f"待写入附件：{format_bytes(int(capacity['attachmentBytes']))}")
+    print(f"附件磁盘可用：{format_bytes(int(capacity['freeBytes']))}")
+    print(
+        "容量预检：通过（含 "
+        f"{format_bytes(int(capacity['reserveBytes']))} 保留空间）"
+        if capacity["enough"]
+        else "容量预检：空间不足，不能执行恢复（需 "
+        f"{format_bytes(int(capacity['requiredBytes']))}，含保留空间）"
+    )
     print(f"备份 SHA-256：{digest}")
 
 
@@ -537,6 +595,13 @@ def apply_import(
         account = resolve_account(connection, account_identifier)
         if duplicate_import(connection, account["id"], digest):
             raise ValueError("此 ZIP 备份已导入过，停止操作以避免重复数据")
+        capacity = check_attachment_capacity(upload_root, sum(file["size"] for file in plan["files"]))
+        if not capacity["enough"]:
+            raise ValueError(
+                "附件目录空间不足，未写入数据库或附件；需要至少 "
+                f"{format_bytes(int(capacity['requiredBytes']))}，当前可用 "
+                f"{format_bytes(int(capacity['freeBytes']))}"
+            )
 
         stage_root = Path(tempfile.mkdtemp(prefix=".restore-stage-", dir=upload_root))
         stage_attachments(archive, plan, upload_root, stage_root)
@@ -610,9 +675,24 @@ def main() -> int:
                 account = resolve_account(connection, args.account)
                 if duplicate_import(connection, account["id"], digest):
                     raise ValueError("此 ZIP 备份已导入过，停止操作以避免重复数据")
-                preview_counts(plan["counts"], account["id"], digest)
+                existing = target_counts(connection, account["id"])
+                capacity = check_attachment_capacity(upload_root, sum(file["size"] for file in plan["files"]))
+                preview_report(
+                    plan["counts"], existing, account["id"], digest,
+                    args.archive.stat().st_size, capacity,
+                )
             finally:
                 connection.close()
+
+            if not capacity["enough"]:
+                if args.apply:
+                    raise ValueError(
+                        "附件目录空间不足，未写入数据库或附件；需要至少 "
+                        f"{format_bytes(int(capacity['requiredBytes']))}，当前可用 "
+                        f"{format_bytes(int(capacity['freeBytes']))}"
+                    )
+                print("当前空间不足：只完成预览，增加可用空间后再恢复。")
+                return 0
 
             if not args.apply:
                 print("预览完成：没有修改数据库或附件。应用时请先停止应用并完成备份，再添加 --apply。")

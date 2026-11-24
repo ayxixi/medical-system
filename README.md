@@ -242,7 +242,7 @@ Docker Compose 默认不启动识别依赖。部署识别 worker、下载模型�
 
 登录后可从账号菜单选择“导出我的数据”，下载包含 `data.json`、说明文件、附件原件和 `manifest.json` 的 ZIP。清单记录其它归档文件的路径、大小与 SHA-256。附件按成员和就诊记录归档；服务端边读边打包并计算摘要，避免将所有附件一次性载入内存。导出中的记录与附件仅限当前账号，缺失或无法读取的附件会使导出失败并提示重试。下载后可在仓库目录运行 `python scripts/verify_export_manifest.py <备份ZIP路径>`，无需解压即可核对清单、文件数量、大小及摘要。该校验可发现文件损坏，但不验证备份来源或清单真实性。备份包含健康信息，请妥善保管。
 
-本地 SQLite 环境可用 `scripts/restore_account_backup.py` 从带清单的账号 ZIP 预览并追加恢复到现有账号。该工具默认只预览，显式加入 `--apply` 并键入确认词后才会写入；原有资料不覆盖、不删除。恢复前须停止应用并备份数据库与附件。Docker 整库恢复仍使用 [部署恢复手册](docs/runbooks/docker-deployment.md#7-备份与恢复)；账号 ZIP 追加恢复的详细步骤见 [账号备份恢复手册](docs/runbooks/account-backup-restore.md)。
+本地 SQLite 环境可用 `scripts/restore_account_backup.py` 从带清单的账号 ZIP 预览并追加恢复到现有账号。预览会显示目标账号数据量和附件容量检查；空间不足时停止恢复。该工具默认只预览，显式加入 `--apply` 并键入确认词后才会写入；原有资料不覆盖、不删除。恢复前须停止应用并备份数据库与附件。Docker 整库恢复仍使用 [部署恢复手册](docs/runbooks/docker-deployment.md#7-备份与恢复)；账号 ZIP 追加恢复的详细步骤见 [账号备份恢复手册](docs/runbooks/account-backup-restore.md)。
 
 ### 操作审计
 

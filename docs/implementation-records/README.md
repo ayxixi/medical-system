@@ -45,3 +45,4 @@
 - [Issue #114：账号 ZIP 备份完整性校验](./issue-114/README.md)
 - [Issue #116：账号 ZIP 备份追加恢复](./issue-116/README.md)
 - [Issue #118：账号操作审计记录查询](./issue-118/README.md)
+- [Issue #120：账号备份恢复容量预检](./issue-120/README.md)
