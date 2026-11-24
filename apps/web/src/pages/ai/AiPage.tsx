@@ -12,6 +12,7 @@ interface Model {
   name: string;
   model: string;
   baseUrl: string;
+  endpoint: string;
 }
 
 function importMatches(text: string, models: Model[]) {
@@ -22,8 +23,18 @@ function importMatches(text: string, models: Model[]) {
     if (group?.vendor !== 'customendpoint' || !Array.isArray(group.models)) continue;
     if (group.apiType && group.apiType !== 'chat-completions') continue;
     for (const entry of group.models) {
-      const match = models.find((model) => model.model === entry?.id
-        && typeof entry?.url === 'string' && model.baseUrl === entry.url.replace(/\/+$/, ''));
+      if (typeof entry?.id !== 'string' || typeof entry?.url !== 'string') continue;
+      let address: URL;
+      try {
+        address = new URL(entry.url);
+      } catch {
+        continue;
+      }
+      if (address.username || address.password || address.search || address.hash) continue;
+      const normalized = address.href.replace(/\/+$/, '');
+      const match = models.find((model) => model.model === entry.id
+        && (model.baseUrl === normalized || model.endpoint === normalized
+          || (address.pathname === '/' && model.baseUrl === `${normalized}/v1`)));
       if (match) ids.add(match.id);
     }
   }
@@ -45,6 +56,8 @@ export default function AiPage() {
   const [busy, setBusy] = useState(false);
   const catalog = useQuery({
     queryKey: ['ai-models', account],
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
     queryFn: async () => (await apiClient.get<Model[]>('/ai/models')).data,
   });
   const users = useQuery({ queryKey: ['ai-members', account], queryFn: listUsers });
@@ -55,6 +68,9 @@ export default function AiPage() {
   });
   const models = catalog.data ?? [];
   const selected = models.find((model) => model.id === modelId);
+  const previewValid = Boolean(submission && selected && !catalog.isError
+    && submission.model.id === selected.id && submission.model.model === selected.model
+    && submission.model.endpoint === selected.endpoint);
   const selectModel = (id: string) => {
     setModelId(id);
     setSubmission(undefined);
@@ -74,6 +90,12 @@ export default function AiPage() {
     }
   }
 
+  const testModel = (model: Model) => void run(async () => {
+    await apiClient.post(`/ai/models/${model.id}/test-draft`,
+      { baseUrl: model.endpoint, model: model.model }, { timeout: 32_000 });
+    setFeedback({ error: false, text: `${model.name}连接成功` });
+  });
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <PageHeader eyebrow="就诊准备" title="AI 问诊" description="整理病程和就诊时想问医生的问题。" />
@@ -84,16 +106,16 @@ export default function AiPage() {
           <Select aria-label="模型" placeholder="选择模型" value={selected?.id} disabled={busy}
             style={{ width: '100%' }} onChange={selectModel}
             options={models.map((model) => ({ value: model.id, label: `${model.name} · ${model.model}` }))} />
-          {selected && <Typography.Text style={{ overflowWrap: 'anywhere' }}>{selected.baseUrl}</Typography.Text>}
+          {selected && <Typography.Text style={{ overflowWrap: 'anywhere' }}>{selected.endpoint}</Typography.Text>}
           <Space wrap>
             <Button disabled={!selected || busy} onClick={() => {
               localStorage.setItem(preference, modelId);
               setFeedback({ error: false, text: '已保存此浏览器的默认模型' });
             }}>设为此浏览器默认</Button>
-            <Button disabled={!selected || busy} onClick={() => void run(async () => {
-              await apiClient.post(`/ai/models/${modelId}/test`, undefined, { timeout: 32_000 });
-              setFeedback({ error: false, text: '连接成功' });
-            })}>测试连接</Button>
+            <Button disabled={!selected || busy || catalog.isFetching || catalog.isError}
+              onClick={() => { if (selected) testModel(selected); }}>测试连接</Button>
+            <Button disabled={busy} loading={catalog.isFetching}
+              onClick={() => void catalog.refetch()}>刷新模型</Button>
           </Space>
           <details>
             <summary>导入 Polaris / VS Code 自定义端点</summary>
@@ -111,7 +133,13 @@ export default function AiPage() {
               }
             }}>导入草稿</Button>
             <Space wrap>
-              {drafts.map((id) => <Button key={id} disabled={busy} onClick={() => selectModel(id)}>{models.find((model) => model.id === id)?.name ?? id}</Button>)}
+              {models.filter((model) => drafts.includes(model.id)).map((model) => (
+                <Space wrap key={model.id}>
+                  <Typography.Text>{model.name}</Typography.Text>
+                  <Button disabled={busy || catalog.isFetching || catalog.isError} onClick={() => testModel(model)}>测试草稿</Button>
+                  <Button disabled={busy || catalog.isFetching || catalog.isError} onClick={() => selectModel(model.id)}>使用草稿</Button>
+                </Space>
+              ))}
             </Space>
           </details>
         </Space>
@@ -135,21 +163,22 @@ export default function AiPage() {
               value: log.id,
               label: `${new Date(log.occurredAt).toLocaleString()} ${[log.temperature == null ? '' : `${log.temperature}°C`, log.medicineName, log.symptoms, log.note].filter(Boolean).join(' ').slice(0, 70)}`,
             }))} />}
-          <Button disabled={!selected || !question.trim() || busy} onClick={() => {
+          <Button disabled={!selected || !question.trim() || busy || catalog.isFetching || catalog.isError} onClick={() => {
             if (!selected) return;
             const context = (logs.data ?? []).filter((log) => records.includes(log.id)).map((log) =>
               [new Date(log.occurredAt).toLocaleString(), log.temperature == null ? '' : `${log.temperature}°C`,
                 log.medicineName, log.dosage, log.symptoms, log.note].filter(Boolean).join(' ').slice(0, 650));
             setSubmission({ model: selected, text: [question.trim(), ...context].join('\n') });
           }}>预览将发送的内容</Button>
-          {submission && <>
-            <Alert message={`将发送至 ${submission.model.name} · ${submission.model.model}（${submission.model.baseUrl}）`} />
+          {submission && !previewValid && <Alert type="warning" message="模型已变更，请重新选择模型并预览发送内容。" />}
+          {submission && previewValid && <>
+            <Alert message={`将发送至 ${submission.model.name} · ${submission.model.model}（${submission.model.endpoint}）`} />
             <Input.TextArea aria-label="发送内容" value={submission.text} rows={6} maxLength={8000} style={{ fontSize: 16 }}
               disabled={busy} onChange={(event) => setSubmission({ ...submission, text: event.target.value })} />
-            <Button type="primary" loading={busy} disabled={!submission.text.trim()} onClick={() => void run(async () => {
+            <Button type="primary" loading={busy} disabled={!submission.text.trim() || catalog.isFetching} onClick={() => void run(async () => {
               setAnswer('');
               const { data } = await apiClient.post<{ answer: string }>(
-                `/ai/models/${submission.model.id}/consult`, { text: submission.text, baseUrl: submission.model.baseUrl, model: submission.model.model }, { timeout: 32_000 });
+                `/ai/models/${submission.model.id}/consult`, { text: submission.text, baseUrl: submission.model.endpoint, model: submission.model.model }, { timeout: 32_000 });
               setAnswer(data.answer);
             })}>确认发送</Button>
           </>}
