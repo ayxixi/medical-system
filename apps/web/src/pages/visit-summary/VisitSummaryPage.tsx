@@ -104,7 +104,14 @@ function SummaryPreview({ name, from, to, logs, visits }: {
           </Checkbox.Group>
         </>}
         <Space wrap>
-          <Button onClick={() => window.print()}>打印或另存为 PDF</Button>
+          <Button onClick={() => {
+            document.documentElement.classList.remove('print-attachments');
+            window.print();
+          }}>打印摘要</Button>
+          {chosen.length > 0 && <Button onClick={() => {
+            document.documentElement.classList.add('print-attachments');
+            window.print();
+          }}>打印附件清单</Button>}
           <Button type="primary" loading={progress !== undefined} disabled={selectedBytes > maxPackageBytes}
             onClick={() => void downloadPackage()}>下载资料包 ZIP</Button>
         </Space>
@@ -118,10 +125,10 @@ function SummaryPreview({ name, from, to, logs, visits }: {
       <h2>就诊资料包</h2>
       <p>{name} · {from} 至 {to}</p>
       <div className="visit-summary-text">{summary}</div>
-      {chosen.length > 0 && <>
+      {chosen.length > 0 && <section className="visit-summary-attachments">
         <h3>检查附件清单</h3>
         <ul>{chosen.map(({ file, date }) => <li key={file.id}>{dayjs(date).format('YYYY-MM-DD')} · {file.originalName}</li>)}</ul>
-      </>}
+      </section>}
     </article>
   </>;
 }
@@ -166,4 +173,8 @@ export default function VisitSummaryPage() {
     {selected && validRange && data.data && !data.isError && <SummaryPreview key={JSON.stringify([selected.id, from, to])}
       name={selected.name} from={from} to={to} logs={data.data.logs} visits={data.data.visits} />}
   </section>;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('afterprint', () => document.documentElement.classList.remove('print-attachments'));
 }
