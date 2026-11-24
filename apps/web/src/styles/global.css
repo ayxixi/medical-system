@@ -588,7 +588,10 @@ textarea { font: inherit; }
 .visit-summary-filters label { display: grid; gap: 6px; min-width: 0; }
 .visit-summary-filters input { font-size: 16px; }
 .visit-summary-document { background: #fff; color: #172827; padding: clamp(16px, 4vw, 36px); border-radius: 12px; overflow-wrap: anywhere; }
-.visit-summary-text { white-space: pre-wrap; line-height: 1.7; }
+.visit-summary-text { display: grid; gap: 12px; line-height: 1.7; }
+.visit-summary-entry { min-width: 0; break-inside: avoid-page; page-break-inside: avoid; }
+.visit-summary-entry h3 { margin: 0 0 6px; color: #245e59; font-size: 1em; font-weight: 700; }
+.visit-summary-entry p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 
 @media print {
   .app-layout:has(.visit-summary-document), .app-layout:has(.visit-summary-document) .app-main-layout,
@@ -610,7 +613,10 @@ textarea { font: inherit; }
 @media print {
   .visit-summary-document h2,
   .visit-summary-document h3 { break-after: avoid-page; page-break-after: avoid; }
-  .visit-summary-text { orphans: 3; widows: 3; }
+  .visit-summary-text { display: block; font-size: 10.5pt; line-height: 1.6; }
+  .visit-summary-entry { margin: 0 0 12pt; break-inside: avoid-page; page-break-inside: avoid; }
+  .visit-summary-entry h3 { margin: 0 0 5pt; color: #111; font-size: 12pt; }
+  .visit-summary-entry p { margin: 0; color: #111; font-size: 10.5pt; line-height: 1.6; orphans: 3; widows: 3; white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; }
   .visit-summary-attachments li { break-inside: avoid; page-break-inside: avoid; }
   .visit-summary-attachments { break-before: page; page-break-before: always; }
   html.print-attachments .visit-summary-document > :not(.visit-summary-attachments) { display: none !important; }
