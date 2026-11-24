@@ -50,19 +50,20 @@ model User {
 }
 
 model Visit {
-  id          String            @id @default(cuid())
-  userId      String
-  date        DateTime
-  hospital    String?
-  department  String?
-  doctor      String?
-  note        String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  records     DiagnosisRecord[]
-  medications Medication[]
-  files       VisitFile[]
+  id              String            @id @default(cuid())
+  userId          String
+  date            DateTime
+  hospital        String?
+  department      String?
+  doctor          String?
+  note            String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  records         DiagnosisRecord[]
+  medications     Medication[]
+  files           VisitFile[]
+  healthReminders HealthReminder[]
 
   @@index([userId])
   @@index([userId, date])
@@ -89,6 +90,7 @@ model HealthLog {
 model HealthReminder {
   id           String    @id @default(cuid())
   userId       String
+  visitId      String?
   kind         String
   title        String
   note         String?
@@ -102,8 +104,10 @@ model HealthReminder {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visit        Visit?    @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   @@index([userId, isActive, nextAt])
+  @@index([visitId])
 }
 
 model DiagnosisRecord {
@@ -162,4 +166,6 @@ model LoginAttempt {
   windowStart  BigInt
   count        Int
   blockedUntil BigInt
+
+  @@index([blockedUntil])
 }

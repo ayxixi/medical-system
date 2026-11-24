@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   App as AntdApp,
@@ -64,6 +65,7 @@ export function HealthRemindersPanel({
   onRecord: (kind: 'temperature' | 'medication', reminderId: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<ReminderFormValues>();
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -239,6 +241,7 @@ export function HealthRemindersPanel({
                       <strong>{reminder.title}</strong>
                       <Tag>{reminderKinds.find((kind) => kind.value === reminder.kind)?.label}</Tag>
                       {!reminder.isActive && <Tag>已暂停</Tag>}
+                      {reminder.visitId && <Tag color="purple">就诊随访</Tag>}
                       {reminder.repeatDaily && <Tag color="blue">每日 {reminder.localTime}</Tag>}
                     </div>
                     <Typography.Text type="secondary">
@@ -249,6 +252,7 @@ export function HealthRemindersPanel({
                     </Typography.Text>
                   </div>
                   <Space size={2} className="health-reminder-actions">
+                    {reminder.visitId && <Button type="text" size="small" onClick={() => navigate(`/visits/${reminder.visitId}`)}>查看就诊</Button>}
                     <Button type="text" size="small" aria-label="编辑提醒" icon={<EditOutlined />} onClick={() => openEdit(reminder)} />
                     <Button
                       type="text"
@@ -284,7 +288,7 @@ export function HealthRemindersPanel({
       >
         <Form form={form} layout="vertical">
           <Form.Item name="kind" label="提醒类型" rules={[{ required: true }]}>
-            <Select options={reminderKinds} />
+            <Select options={editor?.reminder?.visitId ? [{ value: 'custom', label: '就诊随访' }] : reminderKinds} />
           </Form.Item>
           <Form.Item name="title" label="提醒内容" rules={[{ required: true, whitespace: true, max: 100, message: '请输入提醒内容（最多 100 字）' }]}>
             <Input placeholder="例如：测量体温、记录服药" maxLength={100} />

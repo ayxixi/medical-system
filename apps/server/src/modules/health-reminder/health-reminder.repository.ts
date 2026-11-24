@@ -14,17 +14,26 @@ export class HealthReminderRepository {
     return Boolean(user);
   }
 
+  async visitExistsForAccountAndUser(visitId: string, userId: string, accountId: string): Promise<boolean> {
+    const visit = await this.prisma.visit.findFirst({
+      where: { id: visitId, userId, user: { accountId } },
+      select: { id: true },
+    });
+    return Boolean(visit);
+  }
+
   create(data: Prisma.HealthReminderUncheckedCreateInput) {
     return this.prisma.healthReminder.create({ data });
   }
 
-  findMany(filters: { accountId: string; userId?: string; includeInactive?: boolean }) {
+  findMany(filters: { accountId: string; userId?: string; visitId?: string; includeInactive?: boolean }) {
     return this.prisma.healthReminder.findMany({
       where: {
         user: {
           accountId: filters.accountId,
           ...(filters.userId ? { id: filters.userId } : {}),
         },
+        ...(filters.visitId ? { visitId: filters.visitId } : {}),
         completedAt: null,
         ...(filters.includeInactive ? {} : { isActive: true }),
       },

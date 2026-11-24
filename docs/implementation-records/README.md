@@ -47,3 +47,4 @@
 - [Issue #118：账号操作审计记录查询](./issue-118/README.md)
 - [Issue #120：账号备份恢复容量预检](./issue-120/README.md)
 - [Issue #122：家庭成员健康摘要页](./issue-122/README.md)
+- [Issue #124：就诊后复诊与检查提醒](./issue-124/README.md)

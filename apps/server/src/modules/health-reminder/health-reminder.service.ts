@@ -111,12 +111,25 @@ export class HealthReminderService {
     if (!(await this.repository.userExistsForAccount(dto.userId, accountId))) {
       throw new NotFoundException('家庭成员不存在');
     }
+    if (dto.visitId && !(await this.repository.visitExistsForAccountAndUser(dto.visitId, dto.userId, accountId))) {
+      throw new NotFoundException('就诊记录不存在或不属于该成员');
+    }
+    if (dto.visitId && dto.repeatDaily) {
+      throw new BadRequestException('关联就诊的随访提醒只能设置为单次提醒');
+    }
+    if (dto.visitId && dto.kind !== HealthReminderKind.Custom) {
+      throw new BadRequestException('关联就诊的随访提醒类型必须为自定义');
+    }
+    if (dto.visitId && dto.nextAt <= new Date()) {
+      throw new BadRequestException('就诊随访提醒时间必须晚于当前时间');
+    }
     this.validateSchedule(dto);
     const nextAt = dto.repeatDaily
       ? nextDailyOccurrence(dto.localTime as string, dto.timeZone, new Date())
       : dto.nextAt;
     return this.repository.create({
       userId: dto.userId,
+      visitId: dto.visitId ?? null,
       kind: dto.kind,
       title: dto.title,
       note: dto.note,
@@ -131,15 +144,28 @@ export class HealthReminderService {
     if (query.userId && !(await this.repository.userExistsForAccount(query.userId, accountId))) {
       throw new NotFoundException('家庭成员不存在');
     }
+    if (query.visitId && (!query.userId || !(await this.repository.visitExistsForAccountAndUser(query.visitId, query.userId, accountId)))) {
+      throw new NotFoundException('就诊记录不存在或不属于该成员');
+    }
     return this.repository.findMany({
       accountId,
       userId: query.userId,
+      visitId: query.visitId,
       includeInactive: query.includeInactive,
     });
   }
 
   async update(accountId: string, id: string, dto: UpdateHealthReminderDto) {
     const existing = await this.getForAccount(id, accountId);
+    if (existing.visitId && dto.repeatDaily === true) {
+      throw new BadRequestException('关联就诊的随访提醒只能设置为单次提醒');
+    }
+    if (existing.visitId && dto.kind !== undefined && dto.kind !== HealthReminderKind.Custom) {
+      throw new BadRequestException('关联就诊的随访提醒类型必须为自定义');
+    }
+    if (existing.visitId && dto.nextAt && dto.nextAt <= new Date()) {
+      throw new BadRequestException('就诊随访提醒时间必须晚于当前时间');
+    }
     if (dto.title !== undefined && !dto.title?.trim()) {
       throw new BadRequestException('提醒内容不能为空');
     }

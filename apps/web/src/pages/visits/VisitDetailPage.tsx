@@ -41,6 +41,7 @@ import { RecognitionInputActions } from '@/components/RecognitionInputActions';
 import { AttachmentScan } from '@/components/AttachmentScan';
 import { AttachmentThumbnail } from '@/components/AttachmentThumbnail';
 import { PageHeader } from '@/components/PageHeader';
+import { VisitFollowUpPanel } from './VisitFollowUpPanel';
 
 const PREVIEW_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
@@ -375,6 +376,8 @@ export default function VisitDetailPage() {
           </div>
         )}
       </Card>
+
+      {visit.userId && <VisitFollowUpPanel visitId={visit.id} userId={visit.userId} />}
 
       <Modal
         className="responsive-modal"

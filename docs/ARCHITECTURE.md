@@ -237,6 +237,7 @@ sequenceDiagram
 - `Visit` 通过 `userId` 间接归属到某个 `Account`
 - `HealthLog` 通过 `userId` 间接归属到某个 `Account`
 - `HealthReminder` 通过 `userId` 间接归属到某个 `Account`
+- 与就诊关联的 `HealthReminder` 还通过 `visitId` 校验来源就诊属于同一账号和成员
 - `DiagnosisRecord`、`Medication`、`VisitFile` 再通过 `visitId` 间接归属到某个 `Account`
 
 因此仓储层查询通常需要使用关系条件，而不是只按主键命中。
@@ -441,6 +442,7 @@ flowchart LR
 | `VisitDetailPage` 诊断区块 | `src/api/records.ts#createRecord`、`updateRecord`、`deleteRecord` | `record.controller.ts` -> `POST/PATCH/DELETE /records...`、`GET /visits/:visitId/records` | `DiagnosisRecord`、`Visit` |
 | `VisitDetailPage` 用药区块 | `src/api/medications.ts#createMedication`、`updateMedication`、`deleteMedication` | `medication.controller.ts` -> `POST/PATCH/DELETE /medications...`、`GET /visits/:visitId/medications` | `Medication`、`Visit` |
 | `VisitDetailPage` 附件区块 | `src/api/files.ts#uploadFile`、`replaceFile`、`deleteFile` | `file.controller.ts` -> `POST /files/upload`、`PUT /files/:id`、`DELETE /files/:id`、`GET /visits/:visitId/files` | `VisitFile`、`Visit` |
+| `VisitDetailPage` 随访区块 | `src/api/healthReminders.ts` 的关联列表、创建、更新、动作、删除 | `health-reminder.controller.ts` -> `/health-reminders`；服务端同时校验 `visitId`、`userId` 与账号 | `HealthReminder`、`Visit`、`User` |
 | `HealthLogsPage` `/health-logs` | `src/api/healthLogs.ts` 的列表、新建、更新、删除 | `health-log.controller.ts` -> `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | `HealthLog`、`User` |
 | `HealthLogsPage` 提醒区 | `src/api/healthReminders.ts` 的列表、创建、更新、动作、删除 | `health-reminder.controller.ts` -> `/health-reminders` CRUD 与 action | `HealthReminder`、`User` |
 | 账号菜单 -> 数据导出 | `apiClient` -> `GET /export/archive` | `export.controller.ts` -> `ExportService` -> `FileService` / 当前账号文件存储 | 当前账号的医疗数据及 `VisitFile` 原件 |
@@ -460,7 +462,7 @@ flowchart LR
 
 日常病程记录从成员直接关联，与就诊主记录分开保存：`Account -> User -> HealthLog`。
 
-提醒也与正式就诊分离，按成员关联：`Account -> User -> HealthReminder`。
+成员日常提醒按成员关联；复诊/检查随访提醒还可选关联来源就诊：`Account -> User -> HealthReminder -> Visit`。
 
 含义如下：
 
@@ -471,7 +473,7 @@ flowchart LR
 - `Medication`：用药记录。
 - `VisitFile`：附件记录。
 - `HealthLog`：成员按时间记录的体温、实际服药、症状及日常情况。
-- `HealthReminder`：成员按本地日历时间设置的单次或每日重复提醒。
+- `HealthReminder`：成员按本地日历时间设置的单次或每日重复提醒；就诊随访提醒可关联来源 `Visit`，一般提醒仍保持 `visitId = NULL`。
 
 ```mermaid
 erDiagram
@@ -479,6 +481,7 @@ erDiagram
   User ||--o{ Visit : has
   User ||--o{ HealthLog : has
   User ||--o{ HealthReminder : has
+  Visit o|--o{ HealthReminder : follows_up
   Visit ||--o{ DiagnosisRecord : contains
   Visit ||--o{ Medication : contains
   Visit ||--o{ VisitFile : contains
@@ -487,7 +490,7 @@ erDiagram
 该模型体现了两个关键事实：
 
 - 登录账号与家庭成员是分开的两个概念。
-- `Visit` 子资源围绕就诊聚合；`HealthLog` 和 `HealthReminder` 是成员下独立的日常病程数据，不依附某次就诊。
+- `Visit` 子资源围绕就诊聚合；`HealthLog` 是成员下独立的日常病程数据，`HealthReminder` 按成员归属并可选关联某次就诊。
 
 ## 7.1 接口域地图
 

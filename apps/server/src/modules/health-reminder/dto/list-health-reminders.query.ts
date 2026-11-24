@@ -9,6 +9,12 @@ export class ListHealthRemindersQueryDto {
   @MaxLength(64)
   userId?: string;
 
+  @Transform(({ value }) => trimOptionalString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  visitId?: string;
+
   @Transform(({ value }) => value === true || value === 'true')
   @IsOptional()
   @IsBoolean()

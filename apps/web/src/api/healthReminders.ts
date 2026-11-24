@@ -6,6 +6,7 @@ export type HealthReminderAction = 'complete' | 'snooze';
 export interface HealthReminder {
   id: string;
   userId: string;
+  visitId: string | null;
   kind: HealthReminderKind;
   title: string;
   note: string | null;
@@ -20,6 +21,7 @@ export interface HealthReminder {
 
 export interface HealthReminderPayload {
   userId: string;
+  visitId?: string;
   kind: HealthReminderKind;
   title: string;
   note?: string | null;
@@ -31,6 +33,7 @@ export interface HealthReminderPayload {
 
 export async function listHealthReminders(params: {
   userId: string;
+  visitId?: string;
   includeInactive?: boolean;
 }): Promise<HealthReminder[]> {
   const { data } = await apiClient.get<HealthReminder[]>('/health-reminders', { params });

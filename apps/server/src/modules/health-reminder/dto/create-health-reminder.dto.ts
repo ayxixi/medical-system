@@ -19,6 +19,12 @@ export class CreateHealthReminderDto {
   @MaxLength(64)
   userId!: string;
 
+  @Transform(({ value }) => trimOptionalString(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  visitId?: string;
+
   @IsEnum(HealthReminderKind)
   kind!: HealthReminderKind;
 
