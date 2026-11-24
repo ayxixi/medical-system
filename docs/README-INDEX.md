@@ -47,6 +47,7 @@
 - [runbooks/ai-consultation.md](./runbooks/ai-consultation.md) 提供 AI 模型设置与问诊使用说明。
 - [runbooks/attachment-audit.md](./runbooks/attachment-audit.md)：使用只读工具盘点本地附件引用、缺失文件与孤儿候选。
 - [runbooks/export-integrity.md](./runbooks/export-integrity.md)：校验账号 ZIP 备份中的 SHA-256 完整性清单。
+- [runbooks/account-backup-restore.md](./runbooks/account-backup-restore.md)：在本地 SQLite 账号中预览并追加恢复账号 ZIP 备份。
 
 ### 决策记录类文档
 
