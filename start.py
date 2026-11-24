@@ -2,6 +2,7 @@
 import argparse
 import atexit
 import hashlib
+from ipaddress import IPv4Address, IPv4Network
 import os
 import secrets
 import shutil
@@ -12,6 +13,7 @@ import sys
 import time
 import venv
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, build_opener
 
@@ -249,6 +251,34 @@ def prepare_recognition(config):
     return key, worker
 
 
+AI_LOCAL_NETWORKS = tuple(IPv4Network(network) for network in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+))
+
+
+def ai_completion_url(value, exact=False):
+    try:
+        url = urlsplit(value)
+        host = IPv4Address(url.hostname or "")
+        port = url.port
+        if (
+            url.scheme not in ("http", "https")
+            or not any(host in network for network in AI_LOCAL_NETWORKS)
+            or url.username is not None
+            or port == 0
+            or any(char.isspace() or char in "?#,\\" for char in value)
+        ):
+            raise ValueError
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "请使用不含凭据或查询的本机或局域网 IPv4 URL，例如 http://192.168.1.20:11434/v1"
+        ) from error
+    address = value.rstrip("/")
+    if exact or url.path.rstrip("/").endswith("/chat/completions"):
+        return address
+    return address + "/chat/completions"
+
+
 def main():
     parser = argparse.ArgumentParser(description="启动本地医疗记录系统及本机识别服务。")
     parser.add_argument(
@@ -258,6 +288,11 @@ def main():
     )
     parser.add_argument("--backend-port", type=int, default=3000, help="后端监听端口")
     parser.add_argument("--lan", action="store_true", help="允许局域网设备访问前端")
+    parser.add_argument("--ai-server", action="append", default=[], type=ai_completion_url,
+                        help="允许指定局域网 AI API 地址，基础地址会补上 /chat/completions")
+    parser.add_argument("--ai-endpoint", action="append", default=[],
+                        type=lambda value: ai_completion_url(value, exact=True),
+                        help="允许指定局域网 AI 的完整自定义请求地址")
     args = parser.parse_args()
     web_host = "0.0.0.0" if args.lan else "127.0.0.1"
     backend_port = args.backend_port
@@ -293,6 +328,9 @@ def main():
 
     # Give this launcher its own persistent development data.
     env = os.environ.copy()
+    ai_endpoints = [*args.ai_server, *args.ai_endpoint]
+    if ai_endpoints:
+        env["AI_MODEL_LAUNCH_ENDPOINTS"] = ",".join(ai_endpoints)
     env.update(
         NODE_ENV="development",
         PORT=str(backend_port),
