@@ -30,6 +30,7 @@ export interface HealthLogPayload {
 export async function listHealthLogs(params: {
   userId: string;
   from?: string;
+  to?: string;
 }): Promise<HealthLog[]> {
   const { data } = await apiClient.get<HealthLog[]>('/health-logs', { params });
   return data;

@@ -315,6 +315,7 @@ export default function HealthLogsPage() {
         eyebrow="日常病程"
         title="西西记录"
         description="快速记录体温、服药和身体变化，方便回看这几天的情况。"
+        actions={<Button onClick={() => navigate(`/visit-summary?member=${encodeURIComponent(selectedUserId)}`)}>整理就诊资料</Button>}
       />
 
       <div className="health-logs-toolbar">

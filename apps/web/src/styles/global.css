@@ -582,3 +582,17 @@ textarea { font: inherit; }
   .ai-settings-grid { grid-template-columns: minmax(0, 1fr); }
   .ai-settings-grid input { font-size: 16px; }
 }
+
+.visit-summary-page, .visit-summary-controls { display: grid; gap: 16px; }
+.visit-summary-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.visit-summary-filters label { display: grid; gap: 6px; min-width: 0; }
+.visit-summary-filters input { font-size: 16px; }
+.visit-summary-document { background: #fff; color: #172827; padding: clamp(16px, 4vw, 36px); border-radius: 12px; overflow-wrap: anywhere; }
+.visit-summary-text { white-space: pre-wrap; line-height: 1.7; }
+
+@media print {
+  .app-layout:has(.visit-summary-document), .app-layout:has(.visit-summary-document) .app-main-layout,
+  .app-layout:has(.visit-summary-document) .app-content, .visit-summary-page { display: block; min-height: 0; padding: 0; background: white; }
+  .app-layout:has(.visit-summary-document) :is(.app-sider, .app-header, .mobile-bottom-nav, .visit-summary-controls) { display: none !important; }
+  .visit-summary-document { padding: 0; border-radius: 0; }
+}
