@@ -8,6 +8,7 @@ import {
   DatePicker,
   Empty,
   Form,
+  Grid,
   Input,
   InputNumber,
   Modal,
@@ -50,6 +51,24 @@ interface HealthLogFormValues {
   dosage?: string;
   symptoms?: string[];
   note?: string;
+}
+
+function MobileRecordTime({ value, onChange, id }: {
+  value?: Dayjs;
+  onChange?: (value: Dayjs | undefined) => void;
+  id?: string;
+}) {
+  return (
+    <Input
+      id={id}
+      type="datetime-local"
+      value={value?.format('YYYY-MM-DDTHH:mm') ?? ''}
+      onChange={(event) => {
+        const time = dayjs(event.target.value);
+        onChange?.(event.target.value && time.isValid() ? time : undefined);
+      }}
+    />
+  );
 }
 
 interface EditorState {
@@ -152,6 +171,7 @@ function HealthLogDetail({ log }: { log: HealthLog }) {
 
 export default function HealthLogsPage() {
   const navigate = useNavigate();
+  const mobile = Grid.useBreakpoint().md === false;
   const queryClient = useQueryClient();
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<HealthLogFormValues>();
@@ -198,11 +218,22 @@ export default function HealthLogsPage() {
       }
       return savedLog;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['health-logs', selectedUserId] });
-      await queryClient.invalidateQueries({ queryKey: ['health-reminders', selectedUserId] });
+    onSuccess: async (savedLog) => {
+      const userKey = ['health-logs', savedLog.userId];
+      await queryClient.cancelQueries({ queryKey: userKey });
+      const outsideRange = queryFrom && dayjs(savedLog.occurredAt).isBefore(queryFrom);
+      const visibleRange = outsideRange ? 'all' : range;
+      queryClient.setQueryData<HealthLog[]>([...userKey, visibleRange], (previous = []) =>
+        [savedLog, ...previous.filter((log) => log.id !== savedLog.id)].sort(
+          (a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)
+            || Date.parse(b.createdAt) - Date.parse(a.createdAt),
+        ),
+      );
+      if (outsideRange) setRange('all');
       message.success(editor?.record ? '记录已更新' : '记录已保存');
       closeEditor();
+      void queryClient.invalidateQueries({ queryKey: userKey });
+      void queryClient.invalidateQueries({ queryKey: ['health-reminders', savedLog.userId] });
     },
     onError: (error) => message.error(extractErrorMessage(error, '记录保存失败')),
   });
@@ -240,7 +271,7 @@ export default function HealthLogsPage() {
   };
 
   const save = async () => {
-    if (!editor || !selectedUserId) return;
+    if (!editor || !selectedUserId || saveMutation.isPending) return;
     const values = await form.validateFields().catch(() => null);
     if (!values) return;
     const payload: HealthLogPayload = {
@@ -254,9 +285,6 @@ export default function HealthLogsPage() {
       note: values.note?.trim() || null,
     };
 
-    if (range !== 'all' && dayjs(values.occurredAt).isBefore(dayjs().subtract(Number(range) - 1, 'day').startOf('day'))) {
-      setRange('all');
-    }
     await saveMutation.mutateAsync(payload).catch(() => undefined);
   };
 
@@ -337,9 +365,11 @@ export default function HealthLogsPage() {
           </Space>
         )}
       >
-        {logsQuery.isError ? (
-          <Alert type="error" showIcon message="病程记录载入失败" description={extractErrorMessage(logsQuery.error)} />
-        ) : logsQuery.isLoading ? (
+        {logsQuery.isError && (
+          <Alert type="error" showIcon message="病程列表刷新失败" description={extractErrorMessage(logsQuery.error)}
+            action={<Button size="small" onClick={() => void logsQuery.refetch()}>重试</Button>} />
+        )}
+        {logsQuery.isLoading ? (
           <div className="page-loading"><Spin /></div>
         ) : logs.length ? (
           <div className="health-log-list">
@@ -363,7 +393,7 @@ export default function HealthLogsPage() {
               </article>
             ))}
           </div>
-        ) : (
+        ) : !logsQuery.isError && (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有病程记录">
             <Typography.Text type="secondary">从上方快速记下第一次体温、服药或身体情况。</Typography.Text>
           </Empty>
@@ -376,7 +406,11 @@ export default function HealthLogsPage() {
         className="responsive-modal health-log-modal"
         title={editorTitle}
         open={Boolean(editor)}
-        onCancel={closeEditor}
+        onCancel={() => { if (!saveMutation.isPending) closeEditor(); }}
+        cancelButtonProps={{ disabled: saveMutation.isPending }}
+        closable={!saveMutation.isPending}
+        keyboard={!saveMutation.isPending}
+        maskClosable={false}
         onOk={save}
         okText="保存记录"
         cancelText="取消"
@@ -387,11 +421,13 @@ export default function HealthLogsPage() {
         {editor && (
           <Form form={form} layout="vertical" requiredMark={false} preserve={false}>
             <Form.Item label="记录时间" name="occurredAt" rules={[{ required: true, message: '请选择时间' }]}>
-              <DatePicker showTime format="M月D日 HH:mm" className="health-time-picker" allowClear={false} />
+              {mobile
+                ? <MobileRecordTime />
+                : <DatePicker showTime format="M月D日 HH:mm" className="health-time-picker" allowClear={false} />}
             </Form.Item>
             {editor.type === 'temperature' && (
               <Form.Item label="体温（°C）" name="temperature" rules={[{ required: true, message: '请输入体温' }]}>
-                <InputNumber className="health-temperature-input" min={25} max={45} step={0.1} precision={1} placeholder="例如 38.2" />
+                <InputNumber className="health-temperature-input" inputMode="decimal" min={25} max={45} step={0.1} precision={1} placeholder="例如 38.2" />
               </Form.Item>
             )}
             {editor.type === 'medication' && (
