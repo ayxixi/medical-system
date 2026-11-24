@@ -44,6 +44,7 @@
 
 - [runbooks/testing.md](./runbooks/testing.md)：测试执行与验证手册。
 - [runbooks/docker-deployment.md](./runbooks/docker-deployment.md)：Docker Compose 构建、启动、识别 worker、升级、数据保留、备份与恢复步骤。
+- [runbooks/ai-consultation.md](./runbooks/ai-consultation.md) 提供 AI 模型设置与问诊使用说明。
 
 ### 决策记录类文档
 
