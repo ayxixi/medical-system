@@ -37,3 +37,4 @@
 - [Issue #66：西西记录体温与服药提醒](./issue-66/README.md)
 - [Issue #68：病程提醒边界验证](./issue-68/README.md)
 - [Issue #70：电子病历品牌名称](./issue-70/README.md)
+- [Issue #72：应用内品牌名称同步](./issue-72/README.md)
