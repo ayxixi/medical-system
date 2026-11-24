@@ -13,10 +13,44 @@ import { exportVisitPackage, maxPackageBytes } from './exportVisitPackage';
 
 const stamp = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm');
 const types = { temperature: '体温', medication: '服药', symptom: '症状', note: '日常' };
+const summaryHeadings = new Set(['体温概况', '病程时间线', '就诊记录']);
+
+function SummaryText({ value }: { value: string }) {
+  const blocks = value.split(/\n{2,}/).filter((block) => block.trim());
+  return <div className="visit-summary-text">
+    {blocks.map((block, index) => {
+      const [firstLine, ...rest] = block.split('\n');
+      const isHeading = summaryHeadings.has(firstLine.trim());
+      return <section className="visit-summary-entry" key={`${index}-${firstLine}`}>
+        {isHeading && <h3>{firstLine}</h3>}
+        <p>{(isHeading ? rest : [firstLine, ...rest]).join('\n')}</p>
+      </section>;
+    })}
+  </div>;
+}
 
 function generateSummary(logs: HealthLog[], visits: Visit[]) {
   const temperatures = logs.filter((log) => log.type === 'temperature' && log.temperature != null);
   const readings = temperatures.map((log) => log.temperature!);
+  const logEntries = [...logs].sort((a, b) => dayjs(a.occurredAt).valueOf() - dayjs(b.occurredAt).valueOf())
+    .map((log) => [
+      `${stamp(log.occurredAt)} · ${types[log.type]}`,
+      ...(log.temperature == null ? [] : [`体温：${log.temperature} °C`]),
+      ...(log.medicineName ? [`药品：${log.medicineName}`] : []),
+      ...(log.dosage ? [`用量：${log.dosage}`] : []),
+      ...(log.symptoms ? [`症状：${log.symptoms}`] : []),
+      ...(log.note ? [`备注：${log.note}`] : []),
+    ].join('\n'));
+  const visitEntries = visits.map((visit) => [
+    `${dayjs(visit.date).format('YYYY-MM-DD')} · 就诊记录`,
+    ...(visit.hospital ? [`医院：${visit.hospital}`] : []),
+    ...(visit.department ? [`科室：${visit.department}`] : []),
+    ...(visit.doctor ? [`医生：${visit.doctor}`] : []),
+    ...(visit.records ?? []).map((record) => `诊断：${record.diagnosis}`),
+    ...(visit.medications ?? []).map((medication) =>
+      `用药：${[medication.name, medication.dosage, medication.frequency, medication.duration].filter(Boolean).join(' · ')}`),
+    ...(visit.note ? [`备注：${visit.note}`] : []),
+  ].join('\n'));
   const sections = [
     '体温概况',
     readings.length
@@ -24,20 +58,10 @@ function generateSummary(logs: HealthLog[], visits: Visit[]) {
       : '所选日期内无体温记录',
     '',
     '病程时间线',
-    ...[...logs].sort((a, b) => dayjs(a.occurredAt).valueOf() - dayjs(b.occurredAt).valueOf()).map((log) =>
-      [stamp(log.occurredAt), types[log.type], log.temperature == null ? '' : `${log.temperature} °C`,
-        log.medicineName, log.dosage, log.symptoms, log.note].filter(Boolean).join('　')),
-    ...(logs.length ? [] : ['所选日期内无病程记录']),
+    logEntries.length ? logEntries.join('\n\n') : '所选日期内无病程记录',
     '',
     '就诊记录',
-    ...visits.flatMap((visit) => [
-      [dayjs(visit.date).format('YYYY-MM-DD'), visit.hospital, visit.department, visit.doctor].filter(Boolean).join('　'),
-      ...(visit.records ?? []).map((record) => `诊断记录：${record.diagnosis}`),
-      ...(visit.medications ?? []).map((medication) =>
-        `就诊用药：${[medication.name, medication.dosage, medication.frequency, medication.duration].filter(Boolean).join('　')}`),
-      ...(visit.note ? [`备注：${visit.note}`] : []),
-    ]),
-    ...(visits.length ? [] : ['所选日期内无就诊记录']),
+    visitEntries.length ? visitEntries.join('\n\n') : '所选日期内无就诊记录',
   ];
   return sections.join('\n');
 }
@@ -124,7 +148,7 @@ function SummaryPreview({ name, from, to, logs, visits }: {
     <article className="visit-summary-document" aria-label="就诊资料包预览">
       <h2>就诊资料包</h2>
       <p>{name} · {from} 至 {to}</p>
-      <div className="visit-summary-text">{summary}</div>
+      <SummaryText value={summary} />
       {chosen.length > 0 && <section className="visit-summary-attachments">
         <h3>检查附件清单</h3>
         <ul>{chosen.map(({ file, date }) => <li key={file.id}>{dayjs(date).format('YYYY-MM-DD')} · {file.originalName}</li>)}</ul>
