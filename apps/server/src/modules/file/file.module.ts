@@ -30,5 +30,6 @@ import { FILE_STORAGE_SERVICE } from './storage/storage.interface';
       },
     },
   ],
+  exports: [FileService],
 })
 export class FileModule {}
