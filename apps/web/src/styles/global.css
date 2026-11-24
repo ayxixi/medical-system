@@ -606,3 +606,13 @@ textarea { font: inherit; }
 .scan-crop-picture img { display: block; width: auto; height: auto; max-width: 100%; max-height: 34vh; }
 .scan-crop-outline { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 500px #0007; }
 .scan-crop-control { display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: center; }
+
+@media print {
+  .visit-summary-document h2,
+  .visit-summary-document h3 { break-after: avoid-page; page-break-after: avoid; }
+  .visit-summary-text { orphans: 3; widows: 3; }
+  .visit-summary-attachments li { break-inside: avoid; page-break-inside: avoid; }
+  .visit-summary-attachments { break-before: page; page-break-before: always; }
+  html.print-attachments .visit-summary-document > :not(.visit-summary-attachments) { display: none !important; }
+  html.print-attachments .visit-summary-attachments { break-before: auto; page-break-before: auto; }
+}
