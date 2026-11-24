@@ -38,3 +38,4 @@
 - [Issue #68：病程提醒边界验证](./issue-68/README.md)
 - [Issue #70：电子病历品牌名称](./issue-70/README.md)
 - [Issue #72：应用内品牌名称同步](./issue-72/README.md)
+- [Issue #106：账号完整数据 ZIP 导出](./issue-106/README.md)

@@ -8,7 +8,10 @@ describe('ExportService', () => {
 
   beforeEach(() => {
     findUnique = jest.fn();
-    service = new ExportService({ account: { findUnique } } as unknown as PrismaService);
+    service = new ExportService(
+      { account: { findUnique } } as unknown as PrismaService,
+      {} as never,
+    );
   });
 
   it('exports only the requested account and the documented medical metadata', async () => {
