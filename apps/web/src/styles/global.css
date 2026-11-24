@@ -539,3 +539,16 @@ textarea { font: inherit; }
   .health-quick-action.ant-btn { grid-template-columns: minmax(0, 1fr); grid-template-rows: 23px 1fr 1fr; height: 91px; }
   .health-quick-action.ant-btn > .anticon { grid-row: auto; align-self: end; }
 }
+
+@media (max-width: 767px) {
+  .health-log-modal .ant-form input,
+  .health-log-modal .ant-form textarea {
+    font-size: 16px;
+  }
+
+  .health-log-modal input[type='datetime-local'] {
+    min-height: 44px;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
