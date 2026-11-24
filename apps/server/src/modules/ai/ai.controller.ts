@@ -4,14 +4,9 @@ import { IsString, Length, Matches } from 'class-validator';
 import * as Joi from 'joi';
 import { isIP } from 'node:net';
 
-class ConsultInput {
+class ModelDestination {
   @IsString()
-  @Length(1, 8000)
-  @Matches(/\S/)
-  text!: string;
-
-  @IsString()
-  @Length(1, 2048)
+  @Length(1, 2100)
   baseUrl!: string;
 
   @IsString()
@@ -19,11 +14,19 @@ class ConsultInput {
   model!: string;
 }
 
+class ConsultInput extends ModelDestination {
+  @IsString()
+  @Length(1, 8000)
+  @Matches(/\S/)
+  text!: string;
+}
+
 interface Model {
   id: string;
   name: string;
   model: string;
   baseUrl: string;
+  exactEndpoint?: boolean;
   apiKeyEnv?: string;
 }
 
@@ -32,6 +35,7 @@ const catalogSchema = Joi.array().max(30).unique('id').items(Joi.object({
   name: Joi.string().trim().min(1).max(100).required(),
   model: Joi.string().trim().min(1).max(180).required(),
   baseUrl: Joi.string().uri({ scheme: ['http', 'https'] }).max(2048).required(),
+  exactEndpoint: Joi.boolean().optional(),
   apiKeyEnv: Joi.string().pattern(/^AI_MODEL_KEY_[A-Z0-9_]+$/).optional(),
 }));
 
@@ -44,6 +48,12 @@ function localEndpoint(baseUrl: string) {
   );
   if (!local || url.username || url.password || url.search || url.hash) throw new Error();
   return url.href.replace(/\/+$/, '');
+}
+
+function completionEndpoint(model: Model) {
+  return model.exactEndpoint || model.baseUrl.endsWith('/chat/completions')
+    ? model.baseUrl
+    : `${model.baseUrl}/chat/completions`;
 }
 
 @Controller('ai/models')
@@ -63,12 +73,24 @@ export class AiController {
   @Get()
   @Header('Cache-Control', 'no-store')
   list() {
-    return this.models().map(({ id, name, model, baseUrl }) => ({ id, name, model, baseUrl }));
+    return this.models().map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      model: entry.model,
+      baseUrl: entry.baseUrl,
+      endpoint: completionEndpoint(entry),
+    }));
   }
 
   @Post(':id/test')
   async test(@Param('id') id: string) {
     await this.complete(id, '这是连接测试，请只回复 OK。');
+    return { ok: true };
+  }
+
+  @Post(':id/test-draft')
+  async testDraft(@Param('id') id: string, @Body() destination: ModelDestination) {
+    await this.complete(id, '这是连接测试，请只回复 OK。', undefined, destination);
     return { ok: true };
   }
 
@@ -81,14 +103,19 @@ export class AiController {
   private async complete(id: string, content: string, system?: string, destination?: Pick<Model, 'baseUrl' | 'model'>) {
     const model = this.models().find((entry) => entry.id === id);
     if (!model) throw new NotFoundException('此模型未配置');
-    if (destination && (destination.baseUrl !== model.baseUrl || destination.model !== model.model)) {
+    const endpoint = completionEndpoint(model);
+    // Older clients sent the base URL. Accept it only for the original append-path mode.
+    const originalMode = !model.exactEndpoint && endpoint !== model.baseUrl;
+    const matchesAddress = destination?.baseUrl === endpoint
+      || (originalMode && destination?.baseUrl === model.baseUrl);
+    if (destination && (!matchesAddress || destination.model !== model.model)) {
       throw new ConflictException('模型配置已变更，请刷新页面后重新确认发送内容');
     }
     const key = model.apiKeyEnv ? this.config.get<string>(model.apiKeyEnv) : undefined;
     if (model.apiKeyEnv && !key) throw new ServiceUnavailableException('所选模型缺少服务器密钥');
 
     try {
-      const response = await fetch(`${model.baseUrl}/chat/completions`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         redirect: 'error',
         signal: AbortSignal.timeout(28_000),
