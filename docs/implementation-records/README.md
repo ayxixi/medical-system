@@ -46,3 +46,4 @@
 - [Issue #116：账号 ZIP 备份追加恢复](./issue-116/README.md)
 - [Issue #118：账号操作审计记录查询](./issue-118/README.md)
 - [Issue #120：账号备份恢复容量预检](./issue-120/README.md)
+- [Issue #122：家庭成员健康摘要页](./issue-122/README.md)

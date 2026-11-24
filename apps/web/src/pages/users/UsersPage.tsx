@@ -11,17 +11,19 @@ import {
   Spin,
   Typography,
 } from 'antd';
-import { EditOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
+import { EditOutlined, HeartOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createUser, deleteUser, listUsers, updateUser, type User } from '@/api/users';
 import { extractErrorMessage } from '@/api/client';
 import { PageHeader } from '@/components/PageHeader';
+import { useNavigate } from 'react-router-dom';
 
 interface UserFormValues { name: string; }
 
 export default function UsersPage() {
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<User | null>(null);
   const [creating, setCreating] = useState(false);
   const [form] = Form.useForm<UserFormValues>();
@@ -119,6 +121,15 @@ export default function UsersPage() {
                 <div className="member-card-heading">
                   <Typography.Title level={4} className="member-card-name">{user.name}</Typography.Title>
                   <div className="member-card-actions">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<HeartOutlined />}
+                      aria-label={`查看${user.name}健康摘要`}
+                      onClick={() => navigate(`/users/${user.id}/summary`)}
+                    >
+                      健康摘要
+                    </Button>
                     <Button
                       type="text"
                       size="small"

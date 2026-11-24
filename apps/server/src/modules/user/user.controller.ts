@@ -34,6 +34,14 @@ export class UserController {
     return this.userService.findMany(account.id);
   }
 
+  @Get(':id/summary')
+  findHealthSummary(
+    @CurrentAccount() account: AuthenticatedAccount,
+    @Param('id') id: string,
+  ) {
+    return this.userService.findHealthSummary(account.id, id);
+  }
+
   @Get(':id')
   findById(
     @CurrentAccount() account: AuthenticatedAccount,

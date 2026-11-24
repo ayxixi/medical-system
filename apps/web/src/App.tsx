@@ -6,6 +6,7 @@ const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
 const HomePage = lazy(() => import('./pages/home/HomePage'));
 const UsersPage = lazy(() => import('./pages/users/UsersPage'));
+const UserHealthSummaryPage = lazy(() => import('./pages/users/UserHealthSummaryPage'));
 const VisitsPage = lazy(() => import('./pages/visits/VisitsPage'));
 const VisitDetailPage = lazy(() => import('./pages/visits/VisitDetailPage'));
 const HealthLogsPage = lazy(() => import('./pages/health-logs/HealthLogsPage'));
@@ -37,6 +38,7 @@ export default function App() {
         >
           <Route path="/" element={<HomePage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/users/:id/summary" element={<UserHealthSummaryPage />} />
           <Route path="/visits" element={<VisitsPage />} />
           <Route path="/visits/:id" element={<VisitDetailPage />} />
           <Route path="/health-logs" element={<HealthLogsPage />} />
