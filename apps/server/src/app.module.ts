@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { HealthController } from './health.controller';
+import { AiController } from './modules/ai/ai.controller';
 import { EnvModule } from './config/env.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -33,7 +34,7 @@ import { PrismaModule } from './prisma/prisma.module';
     HealthLogModule,
     HealthReminderModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, AiController],
   providers: [
     {
       provide: APP_GUARD,
