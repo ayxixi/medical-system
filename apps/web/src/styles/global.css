@@ -596,3 +596,8 @@ textarea { font: inherit; }
   .app-layout:has(.visit-summary-document) :is(.app-sider, .app-header, .mobile-bottom-nav, .visit-summary-controls) { display: none !important; }
   .visit-summary-document { padding: 0; border-radius: 0; }
 }
+
+.scan-page-list { display: grid; gap: 12px; margin-top: 16px; }
+.scan-page-item { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: center; overflow-wrap: anywhere; }
+.scan-page-preview { display: grid; place-items: center; height: 88px; overflow: hidden; }
+.scan-page-preview img { width: 82px; height: 82px; object-fit: contain; }
