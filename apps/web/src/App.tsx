@@ -13,6 +13,7 @@ const AiPage = lazy(() => import('./pages/ai/AiPage'));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
 const VisitSummaryPage = lazy(() => import('./pages/visit-summary/VisitSummaryPage'));
 const DataExportPage = lazy(() => import('./pages/data-export/DataExportPage'));
+const AuditPage = lazy(() => import('./pages/audit/AuditPage'));
 const AppLayout = lazy(() => import('./layouts/AppLayout'));
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/health-logs" element={<HealthLogsPage />} />
           <Route path="/visit-summary" element={<VisitSummaryPage />} />
           <Route path="/data-export" element={<DataExportPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/ai" element={<AiPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
