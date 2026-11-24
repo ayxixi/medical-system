@@ -1,5 +1,5 @@
 import { useAiPermissions } from '@/api/aiPermissions';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Avatar, Button, Dropdown, Grid, Layout, Typography } from 'antd';
 import {
   HomeOutlined,
@@ -113,7 +113,11 @@ export default function AppLayout() {
           </Dropdown>
         </Header>
         <Content className="app-content">
-          <div className="app-content-inner"><Outlet /></div>
+          <div className="app-content-inner">
+            <Suspense fallback={<div className="page-loading" role="status">页面加载中…</div>}>
+              <Outlet />
+            </Suspense>
+          </div>
         </Content>
       </Layout>
       {mobile && (
