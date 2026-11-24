@@ -108,6 +108,7 @@ sequenceDiagram
 - `apps/server/src/modules/record/`：诊断记录管理。
 - `apps/server/src/modules/medication/`：用药记录管理。
 - `apps/server/src/modules/file/`：附件上传、替换、删除与存储实现。
+- `apps/server/src/modules/export/`：按当前账号导出 JSON 或包含附件原件的流式 ZIP。
 - `apps/server/src/prisma/`：Prisma 模块与服务。
 - `apps/server/prisma/schema.prisma`：数据模型定义。
 
@@ -442,6 +443,7 @@ flowchart LR
 | `VisitDetailPage` 附件区块 | `src/api/files.ts#uploadFile`、`replaceFile`、`deleteFile` | `file.controller.ts` -> `POST /files/upload`、`PUT /files/:id`、`DELETE /files/:id`、`GET /visits/:visitId/files` | `VisitFile`、`Visit` |
 | `HealthLogsPage` `/health-logs` | `src/api/healthLogs.ts` 的列表、新建、更新、删除 | `health-log.controller.ts` -> `GET/POST /health-logs`、`PATCH/DELETE /health-logs/:id` | `HealthLog`、`User` |
 | `HealthLogsPage` 提醒区 | `src/api/healthReminders.ts` 的列表、创建、更新、动作、删除 | `health-reminder.controller.ts` -> `/health-reminders` CRUD 与 action | `HealthReminder`、`User` |
+| 账号菜单 -> 数据导出 | `apiClient` -> `GET /export/archive` | `export.controller.ts` -> `ExportService` -> `FileService` / 当前账号文件存储 | 当前账号的医疗数据及 `VisitFile` 原件 |
 
 如果从工程主线来理解，这张表可以再压缩成下面这条链路：
 

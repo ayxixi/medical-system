@@ -3,6 +3,7 @@ import { Suspense, useState } from 'react';
 import { Avatar, Button, Dropdown, Grid, Layout, Typography } from 'antd';
 import {
   HomeOutlined,
+  DownloadOutlined,
   MessageOutlined,
   SettingOutlined,
   HeartOutlined,
@@ -99,6 +100,7 @@ export default function AppLayout() {
             menu={{
               items: [
                 { key: 'identity', disabled: true, label: account?.email ?? '当前账号' },
+                { key: 'export-data', icon: <DownloadOutlined />, label: '导出我的数据', onClick: () => navigate('/data-export') },
                 { type: 'divider' },
                 { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
               ],
