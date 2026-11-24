@@ -24,6 +24,64 @@ export class UserRepository {
     });
   }
 
+  findHealthSummaryForAccount(id: string, accountId: string) {
+    return this.prisma.user.findFirst({
+      where: { id, accountId },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        _count: {
+          select: {
+            visits: true,
+            healthLogs: true,
+            reminders: { where: { isActive: true } },
+          },
+        },
+        visits: {
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
+          take: 5,
+          select: {
+            id: true,
+            date: true,
+            hospital: true,
+            department: true,
+            records: { select: { id: true, diagnosis: true } },
+            medications: { select: { id: true, name: true, dosage: true, frequency: true } },
+          },
+        },
+        healthLogs: {
+          orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+          take: 10,
+          select: {
+            id: true,
+            type: true,
+            occurredAt: true,
+            temperature: true,
+            medicineName: true,
+            dosage: true,
+            symptoms: true,
+            note: true,
+          },
+        },
+        reminders: {
+          where: { isActive: true },
+          orderBy: [{ nextAt: 'asc' }, { id: 'asc' }],
+          take: 5,
+          select: {
+            id: true,
+            kind: true,
+            title: true,
+            nextAt: true,
+            localTime: true,
+            timeZone: true,
+            repeatDaily: true,
+          },
+        },
+      },
+    });
+  }
+
   countByAccount(accountId: string) {
     return this.prisma.user.count({ where: { accountId } });
   }

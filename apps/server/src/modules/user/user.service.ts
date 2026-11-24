@@ -32,6 +32,14 @@ export class UserService {
     return user;
   }
 
+  async findHealthSummary(accountId: string, id: string) {
+    const summary = await this.userRepository.findHealthSummaryForAccount(id, accountId);
+    if (!summary) {
+      throw new NotFoundException('用户不存在');
+    }
+    return summary;
+  }
+
   async update(accountId: string, id: string, updateUserDto: UpdateUserDto) {
     const user = await this.userRepository.updateForAccount(id, accountId, {
       name: updateUserDto.name,
