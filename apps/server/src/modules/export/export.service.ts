@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import archiver = require('archiver');
+import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { FileService } from '../file/file.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -115,12 +116,26 @@ export class ExportService {
   async exportAccountArchive(accountId: string): Promise<Readable> {
     const data = await this.exportAccount(accountId);
     const archive = archiver('zip', { store: true });
-    archive.on('warning', (error) => archive.destroy(error));
-    archive.append(`${JSON.stringify(data, null, 2)}\n`, { name: 'data.json' });
-    archive.append(
-      'data.json contains the account medical record metadata. Original files are stored under attachments/ using member and visit folders.\n',
-      { name: 'README.txt' },
+    archive.on('error', () => {
+      archive.abort();
+      archive.destroy();
+    });
+    archive.on('warning', (error) => archive.emit('error', error));
+    const dataJson = Buffer.from(`${JSON.stringify(data, null, 2)}\n`);
+    const readme = Buffer.from(
+      'data.json contains the account medical record metadata. Original files are stored under attachments/ using member and visit folders. manifest.json lists the size and SHA-256 checksum for each other archive file.\n',
     );
+    const manifestFiles: Array<{ path: string; size: number; sha256: string }> = [{
+      path: 'data.json',
+      size: dataJson.byteLength,
+      sha256: createHash('sha256').update(dataJson).digest('hex'),
+    }, {
+      path: 'README.txt',
+      size: readme.byteLength,
+      sha256: createHash('sha256').update(readme).digest('hex'),
+    }];
+    archive.append(dataJson, { name: 'data.json' });
+    archive.append(readme, { name: 'README.txt' });
 
     const fileService = this.fileService;
     for (const user of data.users) {
@@ -134,12 +149,28 @@ export class ExportService {
           ].join('/');
           const source = Readable.from((async function* () {
             const { stream } = await fileService.read(accountId, file.id);
-            for await (const chunk of stream) yield chunk;
+            const hash = createHash('sha256');
+            let size = 0;
+            for await (const chunk of stream) {
+              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              hash.update(buffer);
+              size += buffer.byteLength;
+              yield buffer;
+            }
+            manifestFiles.push({ path: name, size, sha256: hash.digest('hex') });
           })());
           archive.append(source, { name });
         }
       }
     }
+
+    archive.append(Readable.from((async function* () {
+      yield `${JSON.stringify({
+        manifestVersion: 1,
+        algorithm: 'sha256',
+        files: manifestFiles,
+      }, null, 2)}\n`;
+    })()), { name: 'manifest.json' });
 
     void archive.finalize().catch((error: Error) => archive.destroy(error));
     return archive;

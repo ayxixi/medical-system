@@ -50,7 +50,10 @@ export default function DataExportPage() {
     <Card title="完整备份">
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Typography.Paragraph>
-          ZIP 文件包含版本化的 data.json、家庭成员、就诊、诊断、用药、病程、提醒以及原始附件。附件会按成员和就诊记录归档。
+          ZIP 文件包含版本化的 data.json、家庭成员、就诊、诊断、用药、病程、提醒、原始附件和 SHA-256 校验清单。附件会按成员和就诊记录归档。
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          下载后可在仓库目录运行 <Typography.Text code>python scripts/verify_export_manifest.py 备份文件.zip</Typography.Text> 校验文件完整性。该校验用于发现损坏，不验证备份来源。
         </Typography.Paragraph>
         <Alert type="warning" showIcon message="备份文件包含敏感健康信息，请保存在安全位置，不要公开分享。" />
         {error && <Alert type="error" showIcon message={error} />}

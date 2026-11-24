@@ -46,6 +46,7 @@
 - [runbooks/docker-deployment.md](./runbooks/docker-deployment.md)：Docker Compose 构建、启动、识别 worker、升级、数据保留、备份与恢复步骤。
 - [runbooks/ai-consultation.md](./runbooks/ai-consultation.md) 提供 AI 模型设置与问诊使用说明。
 - [runbooks/attachment-audit.md](./runbooks/attachment-audit.md)：使用只读工具盘点本地附件引用、缺失文件与孤儿候选。
+- [runbooks/export-integrity.md](./runbooks/export-integrity.md)：校验账号 ZIP 备份中的 SHA-256 完整性清单。
 
 ### 决策记录类文档
 
