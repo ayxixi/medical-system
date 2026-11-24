@@ -99,7 +99,7 @@ export default function SettingsPage() {
 
   return (
     <section>
-      <PageHeader eyebrow="电子病历" title="设定" description="管理 AI 问诊使用的模型。" />
+      <PageHeader eyebrow="电子病历" title="设定" description="管理员可配置供所有账号使用的 AI 问诊模型。" />
       <Card title="AI 模型设置" loading={saved.isPending}>
         {saved.isError ? <Alert type="error" message={extractErrorMessage(saved.error)} action={
           <Button onClick={() => void saved.refetch()}>重试</Button>} /> : <>
@@ -134,7 +134,7 @@ export default function SettingsPage() {
               <label>显示名称<Input value={selected.name} maxLength={100} disabled={pending} onChange={(e) => update({ name: e.target.value })} /></label>
               <label>模型 ID<Input value={selected.model} maxLength={180} disabled={pending} onChange={(e) => update({ model: e.target.value })} /></label>
               <label>API 地址<Input value={selected.baseUrl} maxLength={2048} disabled={pending} onChange={(e) => update({ baseUrl: e.target.value })} /></label>
-              <Typography.Text type="secondary">使用本机或局域网 IPv4 地址。请求地址须经部署端批准，密钥由部署端配置。</Typography.Text>
+              <Typography.Text type="secondary">使用本机或局域网 IPv4 地址。密钥由部署端配置。</Typography.Text>
               <Checkbox checked={selected.exactEndpoint} disabled={pending} onChange={(e) => update({ exactEndpoint: e.target.checked })}>使用完整请求地址</Checkbox>
               <Space wrap>
                 <Checkbox checked={selected.enabled} disabled={pending} onChange={(e) =>

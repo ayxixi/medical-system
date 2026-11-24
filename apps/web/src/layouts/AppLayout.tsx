@@ -1,3 +1,4 @@
+import { useAiPermissions } from '@/api/aiPermissions';
 import { useState } from 'react';
 import { Avatar, Button, Dropdown, Grid, Layout, Typography } from 'antd';
 import {
@@ -17,7 +18,7 @@ import { useAuthStore } from '@/store/auth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 const { Header, Sider, Content } = Layout;
-const navigation = [
+const allNavigation = [
   { key: '/', label: '首页', shortLabel: '首页', icon: <HomeOutlined /> },
   { key: '/users', label: '家庭成员', shortLabel: '成员', icon: <TeamOutlined /> },
   { key: '/visits', label: '就诊记录', shortLabel: '就诊', icon: <MedicineBoxOutlined /> },
@@ -33,6 +34,8 @@ export default function AppLayout() {
   const location = useLocation();
   const account = useAuthStore((state) => state.account);
   const clear = useAuthStore((state) => state.clear);
+  const { data: permissions } = useAiPermissions();
+  const navigation = allNavigation.filter((item) => item.key !== '/settings' || permissions?.canManage);
   const selectedKey = navigation
     .map(({ key }) => key)
     .filter((key) => location.pathname === key || location.pathname.startsWith(`${key}/`))
@@ -114,7 +117,7 @@ export default function AppLayout() {
         </Content>
       </Layout>
       {mobile && (
-        <nav className="mobile-bottom-nav" aria-label="主导航">
+        <nav className="mobile-bottom-nav" style={{ gridTemplateColumns: `repeat(${navigation.length}, minmax(0, 1fr))` }} aria-label="主导航">
           {navigation.map((item) => (
             <button
               key={item.key}

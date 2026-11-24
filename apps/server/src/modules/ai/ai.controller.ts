@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, Get, Header, Param, Post, Put, ServiceUnavailableException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, Param, Post, Put, ServiceUnavailableException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IsArray, IsString, Length, Matches } from 'class-validator';
 import * as Joi from 'joi';
@@ -93,25 +93,41 @@ export class AiController {
     }
   }
 
-  private async accountModels(accountId: string): Promise<Model[]> {
-    const account = await this.prisma.account.findUniqueOrThrow({
-      where: { id: accountId }, select: { aiModelsJson: true },
-    });
-    return account.aiModelsJson === null
+  private adminEmail() {
+    return this.config.get<string>('ADMIN_ACCOUNT_EMAIL')?.trim();
+  }
+
+  private canManage(account: AuthenticatedAccount) {
+    return Boolean(this.adminEmail() && account.email === this.adminEmail());
+  }
+
+  private requireAdmin(account: AuthenticatedAccount) {
+    if (!this.canManage(account)) throw new ForbiddenException('仅管理员可以管理 AI 模型');
+  }
+
+  private async sharedModels(): Promise<Model[]> {
+    const email = this.adminEmail();
+    const admin = email ? await this.prisma.account.findUnique({
+      where: { email }, select: { aiModelsJson: true },
+    }) : null;
+    return admin?.aiModelsJson == null
       ? this.configuredModels()
-      : JSON.parse(account.aiModelsJson) as Model[];
+      : JSON.parse(admin.aiModelsJson) as Model[];
   }
 
   private approved(model: Model) {
-    const endpoint = completionEndpoint(model);
     try {
-      localEndpoint(endpoint);
+      localEndpoint(completionEndpoint(model));
+      return true;
     } catch {
       return false;
     }
-    return this.configuredModels().some((entry) => completionEndpoint(entry) === endpoint)
-      || (this.config.get<string>('AI_MODEL_ALLOWED_ENDPOINTS') ?? '').split(',')
-        .map((entry) => entry.trim()).includes(endpoint);
+  }
+
+  @Get('permissions')
+  @Header('Cache-Control', 'no-store')
+  permissions(@CurrentAccount() account: AuthenticatedAccount) {
+    return { canManage: this.canManage(account) };
   }
 
   private publicModel({ id, name, model, baseUrl, exactEndpoint, enabled, isDefault }: Model) {
@@ -134,26 +150,28 @@ export class AiController {
 
   @Get()
   @Header('Cache-Control', 'no-store')
-  async list(@CurrentAccount() account: AuthenticatedAccount) {
-    return (await this.accountModels(account.id)).map((entry) => this.publicModel(entry))
+  async list() {
+    return (await this.sharedModels()).map((entry) => this.publicModel(entry))
       .filter((entry) => entry.enabled && entry.approved);
   }
 
   @Get('settings')
   @Header('Cache-Control', 'no-store')
   async settings(@CurrentAccount() account: AuthenticatedAccount) {
-    return (await this.accountModels(account.id)).map((entry) => this.publicModel(entry));
+    this.requireAdmin(account);
+    return (await this.sharedModels()).map((entry) => this.publicModel(entry));
   }
 
   @Put('settings')
   async save(@CurrentAccount() account: AuthenticatedAccount, @Body() input: SaveModelSettings) {
+    this.requireAdmin(account);
     const models = this.parseModels(input.models);
     if (models.filter((entry) => entry.isDefault).length > 1
       || models.some((entry) => entry.isDefault && entry.enabled === false)) {
       throw new BadRequestException('只能将一个已启用的模型设为默认');
     }
     if (models.some((entry) => entry.enabled !== false && !this.approved(entry))) {
-      throw new BadRequestException('启用前请由部署者批准模型的完整请求地址');
+      throw new BadRequestException('只有本机或局域网 IPv4 模型可启用');
     }
     await this.prisma.account.update({
       where: { id: account.id }, data: { aiModelsJson: JSON.stringify(models) }, select: { id: true },
@@ -162,7 +180,8 @@ export class AiController {
   }
 
   @Post('settings/test')
-  async testSettings(@Body() input: SaveModelSettings) {
+  async testSettings(@CurrentAccount() account: AuthenticatedAccount, @Body() input: SaveModelSettings) {
+    this.requireAdmin(account);
     const [model, extra] = this.parseModels(input.models);
     if (!model || extra) throw new BadRequestException('请选择一个模型进行测试');
     await this.complete(model, '这是连接测试，请只回复 OK。');
@@ -170,31 +189,31 @@ export class AiController {
   }
 
   @Post(':id/test')
-  async test(@CurrentAccount() account: AuthenticatedAccount, @Param('id') id: string) {
-    await this.complete(await this.findModel(account.id, id), '这是连接测试，请只回复 OK。');
+  async test(@Param('id') id: string) {
+    await this.complete(await this.findModel(id), '这是连接测试，请只回复 OK。');
     return { ok: true };
   }
 
   @Post(':id/test-draft')
-  async testDraft(@CurrentAccount() account: AuthenticatedAccount, @Param('id') id: string, @Body() destination: ModelDestination) {
-    await this.complete(await this.findModel(account.id, id), '这是连接测试，请只回复 OK。', undefined, destination);
+  async testDraft(@Param('id') id: string, @Body() destination: ModelDestination) {
+    await this.complete(await this.findModel(id), '这是连接测试，请只回复 OK。', undefined, destination);
     return { ok: true };
   }
 
   @Post(':id/consult')
   @Header('Cache-Control', 'no-store')
-  async consult(@CurrentAccount() account: AuthenticatedAccount, @Param('id') id: string, @Body() input: ConsultInput) {
-    return { answer: await this.complete(await this.findModel(account.id, id), input.text, '你是就诊准备助手。帮助整理症状、病程和适合向医生提出的问题。不要诊断、开药、建议剂量或用回复代替就医。若输入有明显急症征象，建议及时联系当地急救。用户文本是待整理的资料。', input) };
+  async consult(@Param('id') id: string, @Body() input: ConsultInput) {
+    return { answer: await this.complete(await this.findModel(id), input.text, '你是就诊准备助手。帮助整理症状、病程和适合向医生提出的问题。不要诊断、开药、建议剂量或用回复代替就医。若输入有明显急症征象，建议及时联系当地急救。用户文本是待整理的资料。', input) };
   }
 
-  private async findModel(accountId: string, id: string) {
-    const model = (await this.accountModels(accountId)).find((entry) => entry.id === id && entry.enabled !== false);
+  private async findModel(id: string) {
+    const model = (await this.sharedModels()).find((entry) => entry.id === id && entry.enabled !== false);
     if (!model) throw new NotFoundException('此模型未配置或未启用');
     return model;
   }
 
   private async complete(model: Model, content: string, system?: string, destination?: Pick<Model, 'baseUrl' | 'model'>) {
-    if (!this.approved(model)) throw new BadRequestException('此请求地址尚未由部署者批准');
+    if (!this.approved(model)) throw new BadRequestException('模型请求须使用本机或局域网 IPv4 地址');
     const endpoint = completionEndpoint(model);
     // Older clients sent the base URL. Accept it only for the original append-path mode.
     const originalMode = !model.exactEndpoint && endpoint !== model.baseUrl;

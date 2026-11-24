@@ -1,3 +1,4 @@
+import { useAiPermissions } from '@/api/aiPermissions';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert, Button, Card, Input, Select, Space, Typography } from 'antd';
@@ -18,6 +19,7 @@ interface Model {
 }
 
 export default function AiPage() {
+  const { data: permissions } = useAiPermissions();
   const account = useAuthStore((state) => state.account?.id);
   const [modelId, setModelId] = useState('');
   const [question, setQuestion] = useState('');
@@ -73,10 +75,10 @@ export default function AiPage() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <PageHeader eyebrow="就诊准备" title="AI 问诊" description="整理病程和就诊时想问医生的问题。" />
-      <Card title="问诊模型" extra={<Link to="/settings">管理模型</Link>}>
+      <Card title="问诊模型" extra={permissions?.canManage && <Link to="/settings">管理模型</Link>}>
         <Space direction="vertical" style={{ width: '100%' }}>
           {catalog.isError && <Alert type="error" message={extractErrorMessage(catalog.error)} />}
-          {catalog.isSuccess && !models.length && <Alert type="info" message="请在设定中添加并启用模型。" />}
+          {catalog.isSuccess && !models.length && <Alert type="info" message="暂无已启用的问诊模型，请联系管理员。" />}
           <Select aria-label="模型" placeholder="选择模型" value={selected?.id} disabled={busy}
             style={{ width: '100%' }} onChange={selectModel}
             options={models.map((model) => ({ value: model.id, label: `${model.name} · ${model.model}` }))} />
