@@ -138,7 +138,13 @@ export class AiController {
 
   private parseModels(input: unknown): Model[] {
     const { error, value } = settingsSchema.validate(input);
-    if (error) throw new BadRequestException('请检查模型名称、地址和数量（最多 30 个）');
+    if (error) {
+      const [index, field] = error.details[0].path;
+      const fields: Record<string, string> = { id: '配置编号', name: '显示名称', model: '模型 ID', baseUrl: 'API 地址' };
+      throw new BadRequestException(typeof index === 'number'
+        ? `第 ${index + 1} 个模型的${fields[String(field)] ?? '配置'}无效，请检查后保存`
+        : '模型配置格式无效，最多可保存 30 个模型');
+    }
     try {
       return (value as Model[]).map((entry) => ({
         ...entry, baseUrl: parseEndpoint(entry.baseUrl).href.replace(/\/+$/, ''),
@@ -170,8 +176,9 @@ export class AiController {
       || models.some((entry) => entry.isDefault && entry.enabled === false)) {
       throw new BadRequestException('只能将一个已启用的模型设为默认');
     }
-    if (models.some((entry) => entry.enabled !== false && !this.approved(entry))) {
-      throw new BadRequestException('只有本机或局域网 IPv4 模型可启用');
+    const unsupported = models.find((entry) => entry.enabled !== false && !this.approved(entry));
+    if (unsupported) {
+      throw new BadRequestException(`「${unsupported.name}」只能使用本机或局域网 IPv4 地址，请修正地址或停用后保存`);
     }
     await this.prisma.account.update({
       where: { id: account.id }, data: { aiModelsJson: JSON.stringify(models) }, select: { id: true },
@@ -227,26 +234,38 @@ export class AiController {
     const key = credential ? this.config.get<string>(credential) : undefined;
     if (credential && !key) throw new ServiceUnavailableException('所选模型缺少服务器密钥');
 
+    const timeout = AbortSignal.timeout(28_000);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         redirect: 'error',
-        signal: AbortSignal.timeout(28_000),
+        signal: timeout,
         headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
         body: JSON.stringify({
           model: model.model,
           messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content }],
-          max_tokens: system ? 1200 : 32,
+          max_tokens: system ? 1200 : 256,
           stream: false,
         }),
       });
-      if (!response.body) throw new Error();
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        const hints: Record<number, string> = {
+          400: '请核对模型 ID 和接口兼容性',
+          401: '请核对服务端 API 密钥',
+          403: '请核对服务端 API 密钥及访问权限',
+          404: '请核对完整请求路径和模型 ID',
+          405: '请确认该路径支持 POST 请求',
+          429: '模型服务请求限流，请稍后重试',
+        };
+        throw new BadGatewayException(`模型服务返回 HTTP ${response.status}：${hints[response.status] ?? '请检查模型服务状态'}`);
+      }
+      if (!response.body) throw new BadGatewayException('模型服务返回了空响应');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let text = '';
       let size = 0;
       try {
-        if (!response.ok) throw new Error();
         while (true) {
           const chunk = await reader.read();
           if (chunk.done) break;
@@ -258,11 +277,20 @@ export class AiController {
       } finally {
         await reader.cancel().catch(() => undefined);
       }
-      const answer: unknown = JSON.parse(text)?.choices?.[0]?.message?.content;
-      if (typeof answer !== 'string' || !answer.trim()) throw new Error();
+      let answer: unknown;
+      try {
+        answer = JSON.parse(text)?.choices?.[0]?.message?.content;
+      } catch {
+        throw new BadGatewayException('模型服务返回的内容不是 JSON，请核对请求路径');
+      }
+      if (typeof answer !== 'string' || !answer.trim()) {
+        throw new BadGatewayException('模型没有返回正文，请检查模型输出设置或换用兼容的对话模型');
+      }
       return answer.trim();
-    } catch {
-      throw new BadGatewayException('模型未返回有效回复，请检查连接、模型名称和服务器密钥');
+    } catch (error) {
+      if (error instanceof BadGatewayException) throw error;
+      if (timeout.aborted) throw new BadGatewayException('等待模型服务回复超时，请检查服务负载后重试');
+      throw new BadGatewayException('无法完成模型请求，请从电子病历后端所在机器检查服务地址、端口与网络');
     }
   }
 }

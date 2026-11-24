@@ -72,7 +72,8 @@ export default function SettingsPage() {
   const [active, setActive] = useState('');
   const [source, setSource] = useState('');
   const [importFeedback, setImportFeedback] = useState<{ type: 'success' | 'error'; text: string }>();
-  const [pending, setPending] = useState(false);
+  const [operation, setOperation] = useState<'save' | 'test'>();
+  const pending = Boolean(operation);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string }>();
   const models = edited ?? saved.data ?? [];
   const selected = models.find((model) => model.id === active) ?? models[0];
@@ -85,15 +86,15 @@ export default function SettingsPage() {
     }));
   }
 
-  async function run(action: () => Promise<string>) {
-    setPending(true);
+  async function run(kind: 'save' | 'test', action: () => Promise<string>) {
+    setOperation(kind);
     setFeedback(undefined);
     try {
       setFeedback({ type: 'success', text: await action() });
     } catch (error) {
-      setFeedback({ type: 'error', text: extractErrorMessage(error) });
+      setFeedback({ type: 'error', text: `${kind === 'save' ? '保存失败' : '测试失败'}：${extractErrorMessage(error)}` });
     } finally {
-      setPending(false);
+      setOperation(undefined);
     }
   }
 
@@ -109,7 +110,7 @@ export default function SettingsPage() {
               setEdited([...models.map(asDraft), { id, name: '', model: '', baseUrl: '', enabled: false, exactEndpoint: false, isDefault: false }]);
               setActive(id);
             }}>新增模型</Button>
-            <Button type="primary" loading={pending} disabled={!edited} onClick={() => void run(async () => {
+            <Button type="primary" loading={operation === 'save'} disabled={pending || !edited} onClick={() => void run('save', async () => {
               const { data } = await apiClient.put<SavedModel[]>('/ai/models/settings', { models: models.map(asDraft) });
               client.setQueryData(['ai-settings', account], data);
               setEdited(undefined);
@@ -136,6 +137,13 @@ export default function SettingsPage() {
               <label>API 地址<Input value={selected.baseUrl} maxLength={2048} disabled={pending} onChange={(e) => update({ baseUrl: e.target.value })} /></label>
               <Typography.Text type="secondary">使用本机或局域网 IPv4 地址。密钥由部署端配置。</Typography.Text>
               <Checkbox checked={selected.exactEndpoint} disabled={pending} onChange={(e) => update({ exactEndpoint: e.target.checked })}>使用完整请求地址</Checkbox>
+              <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>
+                最终请求地址：{(() => {
+                  const address = selected.baseUrl.trim().replace(/\/+$/, '');
+                  if (!address) return '请填写 API 地址';
+                  return selected.exactEndpoint || address.endsWith('/chat/completions') ? address : `${address}/chat/completions`;
+                })()}
+              </Typography.Text>
               <Space wrap>
                 <Checkbox checked={selected.enabled} disabled={pending} onChange={(e) =>
                   update({ enabled: e.target.checked, ...(e.target.checked ? {} : { isDefault: false }) })}>启用</Checkbox>
@@ -143,7 +151,7 @@ export default function SettingsPage() {
                   update({ isDefault: e.target.checked })}>设为默认</Checkbox>
               </Space>
               <Space wrap>
-                <Button disabled={pending} onClick={() => void run(async () => {
+                <Button loading={operation === 'test'} disabled={pending} onClick={() => void run('test', async () => {
                   await apiClient.post('/ai/models/settings/test', { models: [asDraft(selected)] }, { timeout: 32_000 });
                   return '连接成功';
                 })}>测试当前配置</Button>
